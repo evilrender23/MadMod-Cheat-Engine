@@ -101,3 +101,13 @@ def test_watch_freeze_runs_on_single_scheduler(qtbot: QtBot, tmp_path: Path) -> 
         assert controller.list_watches()[0].frozen is False
     finally:
         controller.shutdown()
+
+
+def test_shutdown_closes_backend_and_is_idempotent(tmp_path: Path) -> None:
+    controller, backend, _policy = _controller(tmp_path)
+
+    controller.shutdown()
+    controller.shutdown()
+
+    assert backend.is_open is False
+    assert backend.identity is None

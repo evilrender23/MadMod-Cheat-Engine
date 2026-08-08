@@ -154,6 +154,10 @@ class MainWindow(QMainWindow):
 
     def _install_global_actions(self) -> None:
         specs = (
+            ("first_scan", t("action.first_scan"), "F5", self.scan_panel.first_button.click),
+            ("next_scan", t("action.next_scan"), "F6", self.scan_panel.next_button.click),
+            ("cancel_scan", t("action.cancel"), "Esc", self.scan_panel.cancel_button.click),
+            ("reset_scan", t("action.reset"), "Ctrl+R", self.scan_panel.reset_button.click),
             ("attach", t("action.attach"), "Ctrl+P", self.select_process),
             ("save", t("action.save_workspace"), "Ctrl+S", self.save_workspace),
             ("load", t("action.load_workspace"), "Ctrl+O", self.load_workspace),

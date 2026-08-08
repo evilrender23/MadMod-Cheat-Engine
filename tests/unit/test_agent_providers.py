@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import pytest
 
+import mempilot.agent.providers as providers_module
 from mempilot.agent.conversation import Conversation
 from mempilot.agent.providers import (
     OpenAIResponsesProvider,
@@ -27,6 +28,15 @@ class _Responses:
     def create(self, **payload: object) -> object:
         self.payload = payload
         return SimpleNamespace(output=self.output, output_text=self.text)
+
+
+class _RaisingResponses:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def create(self, **payload: object) -> object:
+        del payload
+        raise self._error
 
 
 def test_openai_responses_provider_uses_exact_non_stored_flat_payload() -> None:
@@ -76,6 +86,76 @@ def test_openai_responses_provider_uses_exact_non_stored_flat_payload() -> None:
         ToolCall("call-1", "read_address", '{"address":4096,"data_type":"int32"}')
     ]
     assert turn.raw_output == [function_call]
+
+
+def test_openai_client_receives_only_configured_connection_options(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _Client:
+        def __init__(self, **options: object) -> None:
+            captured.update(options)
+
+    monkeypatch.setattr(providers_module, "OpenAI", _Client)
+
+    OpenAIResponsesProvider(
+        "sk-test-not-real-123456",
+        AISettings(base_url="https://provider.invalid/v1", timeout_s=9.5, max_retries=4),
+    )
+
+    assert captured == {
+        "api_key": "sk-test-not-real-123456",
+        "base_url": "https://provider.invalid/v1",
+        "timeout": 9.5,
+        "max_retries": 4,
+    }
+
+
+@pytest.mark.parametrize(
+    ("raised_name", "expected"),
+    [
+        ("APITimeoutError", "no respondió a tiempo"),
+        ("RateLimitError", "Límite de peticiones"),
+        ("AuthenticationError", "Clave de API inválida"),
+        ("BadRequestError", "Petición rechazada"),
+        ("APIConnectionError", "Sin conexión"),
+        ("APIStatusError", "HTTP 503 · solicitud req-provider-unique"),
+    ],
+)
+def test_provider_errors_are_mapped_without_exposing_raw_details(
+    monkeypatch: pytest.MonkeyPatch,
+    raised_name: str,
+    expected: str,
+) -> None:
+    exception_types = {
+        name: type(f"_Fake{name}", (Exception,), {})
+        for name in (
+            "APITimeoutError",
+            "RateLimitError",
+            "AuthenticationError",
+            "BadRequestError",
+            "APIConnectionError",
+            "APIStatusError",
+        )
+    }
+    for name, exception_type in exception_types.items():
+        monkeypatch.setattr(providers_module, name, exception_type)
+    error = exception_types[raised_name]("raw provider secret")
+    if raised_name == "APIStatusError":
+        error.status_code = 503
+        error.request_id = "req-provider-unique"
+    client = SimpleNamespace(responses=_RaisingResponses(error))
+    provider = OpenAIResponsesProvider(
+        "sk-test-not-real-123456",
+        AISettings(),
+        client=cast(Any, client),
+    )
+
+    with pytest.raises(ProviderError, match=expected) as captured:
+        provider.complete("prompt", [], [])
+
+    assert "raw provider secret" not in str(captured.value)
 
 
 def test_scripted_provider_replay_prepends_only_fresh_state() -> None:

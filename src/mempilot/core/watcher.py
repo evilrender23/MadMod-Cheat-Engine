@@ -189,12 +189,12 @@ class WatchTable:
             raise ValueError("El intervalo de congelado debe estar entre 50 y 5000 ms.")
         with self._lock:
             entry = self._entry(watch_id)
+            next_desired = desired_value if desired_value is not None else entry.desired_value
+            if frozen and next_desired is None:
+                raise ValueError("Indica un valor deseado antes de congelar la vigilancia.")
             entry.frozen = frozen
             entry.interval_ms = interval_ms
-            if desired_value is not None:
-                entry.desired_value = desired_value
-            if frozen and entry.desired_value is None:
-                raise ValueError("Indica un valor deseado antes de congelar la vigilancia.")
+            entry.desired_value = next_desired
             snapshot = replace(entry)
         self._emit_changed()
         return snapshot

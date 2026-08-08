@@ -6,7 +6,7 @@
 | 1 — Núcleo y laboratorio | Completada | Ruff, mypy y 81 pruebas verdes |
 | 2 — Fachada e interfaz | Completada | Ruff, mypy, 91 pruebas y smoke offscreen verdes |
 | 3 — Agente de IA | Completada | Ruff, mypy, 120 pruebas y smoke sin IA verdes |
-| 4 — Pruebas cruzadas | Pendiente | — |
+| 4 — Pruebas cruzadas | Completada | Ruff, mypy, 164 pruebas y roundtrip Win32 verdes |
 | 5 — Entrega | Pendiente | — |
 
 ## Verificación final

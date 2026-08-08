@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 from PySide6.QtCore import QObject, Signal
+from tests.fixtures.fake_backend import FakeMemoryBackend
 
 from mempilot.agent.orchestrator import (
     AgentOrchestrator,
@@ -18,13 +19,13 @@ from mempilot.agent.orchestrator import (
 )
 from mempilot.agent.policies import AgentMode, AgentPolicy, FlowState
 from mempilot.agent.providers import ProviderTurn, ScriptedProvider, ToolCall
-from mempilot.agent.tools import ToolDef
+from mempilot.agent.tools import ToolDef, ToolRegistry
 from mempilot.config.settings import AISettings
-from mempilot.controller import ScanStatus
+from mempilot.controller import Actor, ScanStatus
 from mempilot.core.backend import Architecture, ProcessIdentity
-from mempilot.core.data_types import DataType
+from mempilot.core.data_types import DataType, encode_value
 from mempilot.core.scan_session import ScanSession, SessionState
-from mempilot.core.scanner import CandidateSet, ScanMode, ScanOptions, ScanRequest
+from mempilot.core.scanner import CandidateSet, ScanEngine, ScanMode, ScanOptions, ScanRequest
 from mempilot.core.watcher import WatchEntry, WatchSpec
 from mempilot.ui.workers import ToolInvocation
 
@@ -58,6 +59,93 @@ class _Controller(QObject):
 
     def list_watches(self) -> list[WatchEntry]:
         return list(self.watches)
+
+
+class _BackendController(_Controller):
+    def __init__(self) -> None:
+        super().__init__()
+        memory = bytearray(128)
+        encoded = encode_value(DataType.INT32, "100")
+        for offset in range(0, 48, 4):
+            memory[offset : offset + 4] = encoded
+        self.backend = FakeMemoryBackend([(0x1000, memory, 0x04)], self.identity)
+        self.engine = ScanEngine(self.backend)
+        self.session: ScanSession | None = None
+        self.actions: list[str] = []
+
+    def start_scan(self, request: ScanRequest, actor: Actor) -> str:
+        assert actor is Actor.AGENT
+        self.actions.append("start_scan")
+        self.scan_started.emit(request)
+        result = self.engine.first_scan(request, threading.Event(), lambda _progress: None)
+        session = ScanSession(self.identity, request.data_type, request.options)
+        session.set_first_result(
+            result,
+            request,
+            regions_scanned=1,
+            bytes_scanned=128,
+            duration_s=0.0,
+            memory_regions=self.backend.regions(),
+        )
+        self.session = session
+        self._publish_session(session)
+        self.backend.poke(0x1000, encode_value(DataType.INT32, "73"))
+        return session.session_id
+
+    def refine_scan(self, request: ScanRequest, actor: Actor) -> str:
+        assert actor is Actor.AGENT
+        assert self.session is not None
+        assert self.session.result is not None
+        self.actions.append("refine_scan")
+        self.scan_started.emit(request)
+        result = self.engine.refine(
+            self.session.result,
+            request,
+            threading.Event(),
+            lambda _progress: None,
+        )
+        self.session.set_refined_result(result, request, duration_s=0.0)
+        self._publish_session(self.session)
+        return self.session.session_id
+
+    def add_watch(self, spec: WatchSpec, actor: Actor) -> WatchEntry:
+        assert actor is Actor.AGENT
+        self.actions.append("add_watch")
+        watch = WatchEntry.from_spec(spec, watch_id="life")
+        watch.current_value = "73"
+        self.watches.append(watch)
+        self.watches_changed.emit()
+        return watch
+
+    def set_freeze(
+        self,
+        watch_id: str,
+        frozen: bool,
+        value: str | None,
+        interval_ms: int,
+        actor: Actor,
+    ) -> None:
+        assert actor is Actor.AGENT
+        assert watch_id == "life"
+        self.actions.append("freeze_watch")
+        watch = self.watches[0]
+        watch.frozen = frozen
+        watch.desired_value = value
+        watch.interval_ms = interval_ms
+        self.watches_changed.emit()
+
+    def _publish_session(self, session: ScanSession) -> None:
+        self.status = ScanStatus(
+            session.session_id,
+            SessionState.READY,
+            session.data_type,
+            session.last_mode,
+            session.total(),
+            None,
+            len(session.history),
+            None,
+        )
+        self.scan_finished.emit(session)
 
 
 class _Registry:
@@ -149,8 +237,8 @@ def _call(call_id: str, name: str, arguments: dict[str, object]) -> ProviderTurn
 
 
 def test_scripted_cycle_scan_refine_watch_freeze_and_signal_states() -> None:
-    controller = _Controller()
-    registry = _Registry(controller)
+    controller = _BackendController()
+    registry = ToolRegistry(controller, AgentPolicy())  # type: ignore[arg-type]
     policy = AgentPolicy(
         AgentMode.AUTONOMOUS,
         write_limit=2,
@@ -158,16 +246,47 @@ def test_scripted_cycle_scan_refine_watch_freeze_and_signal_states() -> None:
     )
     provider = ScriptedProvider(
         [
-            _call("1", "start_scan", {}),
-            _call("2", "refine_scan", {}),
-            _call("3", "add_watch", {"address": 4096}),
-            _call("4", "freeze_watch", {"watch_id": "life", "value": "100"}),
+            _call(
+                "1",
+                "start_scan",
+                {
+                    "data_type": "int32",
+                    "scan_mode": "exact",
+                    "value": "100",
+                    "value2": None,
+                    "alignment": None,
+                    "writable_only": None,
+                    "float_tolerance": None,
+                    "case_sensitive": None,
+                    "timeout_ms": None,
+                },
+            ),
+            _call(
+                "2",
+                "refine_scan",
+                {
+                    "scan_mode": "exact",
+                    "value": "73",
+                    "value2": None,
+                    "timeout_ms": None,
+                },
+            ),
+            _call(
+                "3",
+                "add_watch",
+                {"address": 4096, "data_type": "int32", "label": "Vida"},
+            ),
+            _call(
+                "4",
+                "freeze_watch",
+                {"watch_id": "life", "value": "100", "interval_ms": None},
+            ),
             ProviderTurn("Vida localizada y congelada.", [], []),
         ]
     )
     orchestrator = AgentOrchestrator(
         controller,  # type: ignore[arg-type]
-        registry,  # type: ignore[arg-type]
+        registry,
         policy,
         provider,
         AISettings(confirmation_timeout_s=1),
@@ -179,7 +298,7 @@ def test_scripted_cycle_scan_refine_watch_freeze_and_signal_states() -> None:
     orchestrator.conversation.add_user("Encuentra y congela la vida")
     job = AgentTurnJob(
         provider,
-        registry,  # type: ignore[arg-type]
+        registry,
         orchestrator.conversation,
         orchestrator.flow,
         policy,
@@ -194,7 +313,11 @@ def test_scripted_cycle_scan_refine_watch_freeze_and_signal_states() -> None:
 
     result = job.run(threading.Event(), execute)
 
-    assert registry.executed == ["start_scan", "refine_scan", "add_watch", "freeze_watch"]
+    assert controller.actions == ["start_scan", "refine_scan", "add_watch", "freeze_watch"]
+    assert controller.session is not None
+    assert controller.session.total() == 1
+    assert controller.session.result is not None
+    assert controller.session.result.addresses.tolist() == [0x1000]
     assert FlowState.SCANNING in states
     assert FlowState.CANDIDATES in states
     assert FlowState.NARROWED in states

@@ -29,6 +29,17 @@ def test_corrupt_settings_are_backed_up_and_replaced_by_defaults(tmp_path: Path)
     assert (tmp_path / "settings.json.bak").read_text(encoding="utf-8").startswith("{")
 
 
+def test_unsupported_settings_version_is_backed_up(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text('{"schema_version": 2}', encoding="utf-8")
+
+    loaded = SettingsService(path).load()
+
+    assert loaded == Settings()
+    assert not path.exists()
+    assert (tmp_path / "settings.json.bak").read_text(encoding="utf-8") == ('{"schema_version": 2}')
+
+
 def test_settings_round_trip_never_serializes_credentials(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     settings = Settings.model_validate(
@@ -48,3 +59,8 @@ def test_settings_round_trip_never_serializes_credentials(tmp_path: Path) -> Non
 def test_settings_reject_unknown_fields() -> None:
     with pytest.raises(ValidationError):
         Settings.model_validate({"unexpected": True})
+
+
+def test_settings_model_cannot_accept_an_api_key() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate({"ai": {"api_key": "sk-settings-secret-123456789"}})

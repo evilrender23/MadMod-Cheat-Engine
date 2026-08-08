@@ -196,7 +196,7 @@ class AppController(QObject):
         """Relaunch cancellable process enumeration for GUI callers."""
         cancel = threading.Event()
         worker = ProcessListWorker(self._get_process_service(), query, include_system, cancel)
-        worker.result.connect(self.processes_listed.emit)
+        worker.result.connect(self._on_processes_listed, Qt.ConnectionType.QueuedConnection)
         worker.failed.connect(self._on_process_list_failed)
         thread = start_worker(worker, self._worker_lifecycle_finished)
         self._process_workers[id(thread)] = (worker, thread, cancel)
@@ -717,6 +717,8 @@ class AppController(QObject):
 
     @Slot()
     def _on_scan_thread_finished(self) -> None:
+        if self.sender() is not self._scan_thread:
+            return
         self._scan_worker = self._scan_thread = self._scan_cancel = self._active_scan_request = None
         self._scan_is_refinement = False
 
@@ -788,7 +790,8 @@ class AppController(QObject):
 
     @Slot()
     def _on_scheduler_thread_finished(self) -> None:
-        self._scheduler = self._scheduler_thread = None
+        if self.sender() is self._scheduler_thread:
+            self._scheduler = self._scheduler_thread = None
 
     def _stop_scan_worker(self, wait_ms: int) -> None:
         if self._scan_cancel is not None:
@@ -831,11 +834,16 @@ class AppController(QObject):
 
     @Slot()
     def _on_agent_thread_finished(self) -> None:
-        self._agent_worker = self._agent_thread = self._agent_cancel = None
+        if self.sender() is self._agent_thread:
+            self._agent_worker = self._agent_thread = self._agent_cancel = None
 
     @Slot(object)
     def _on_agent_failed(self, error: object) -> None:
         self.agent_event.emit(error)
+
+    @Slot(object)
+    def _on_processes_listed(self, entries: object) -> None:
+        self.processes_listed.emit(entries)
 
     @Slot(object)
     def _on_process_list_failed(self, error: object) -> None:

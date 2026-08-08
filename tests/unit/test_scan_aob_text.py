@@ -65,9 +65,11 @@ def test_text_case_sensitivity(data_type: DataType, stored: bytes, query: str) -
 
     sensitive = run_scan(backend, data_type, ScanMode.TEXT, query)
     insensitive = run_scan(backend, data_type, ScanMode.TEXT, query, case_sensitive=False)
+    exact_case = run_scan(backend, data_type, ScanMode.TEXT, "PlayerOne")
 
     assert sensitive.addresses.size == 0
     assert insensitive.addresses.tolist() == [BASE + 7]
+    assert exact_case.addresses.tolist() == [BASE + 7]
 
 
 def test_cancel_is_checked_before_each_chunk() -> None:

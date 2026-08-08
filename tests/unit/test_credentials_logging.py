@@ -16,7 +16,7 @@ def test_environment_key_takes_precedence_over_keyring(
     monkeypatch.setattr(
         credentials.keyring,
         "get_password",
-        lambda service, user: "sk-keyring-unique-5678",
+        lambda *_args: pytest.fail("keyring must not be read when environment is configured"),
     )
 
     assert credentials.resolve_api_key() == "sk-environment-unique-1234"
@@ -35,6 +35,16 @@ def test_keyring_is_used_when_environment_is_absent(
 
     assert credentials.resolve_api_key() == "sk-keyring-unique-5678"
     assert credentials.key_source() == "keyring"
+
+
+def test_missing_or_empty_credentials_report_no_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setattr(credentials.keyring, "get_password", lambda *_args: None)
+
+    assert credentials.resolve_api_key() is None
+    assert credentials.key_source() == "ninguna"
 
 
 def test_secret_redaction_filter_removes_keys_from_log_file(

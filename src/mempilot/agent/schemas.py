@@ -39,9 +39,11 @@ def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
             node.pop("default", None)
             node.pop("title", None)
             properties = node.get("properties")
-            if isinstance(properties, dict):
+            if node.get("type") == "object" or isinstance(properties, dict):
+                object_properties = properties if isinstance(properties, dict) else {}
+                node["properties"] = object_properties
                 node["additionalProperties"] = False
-                node["required"] = list(properties)
+                node["required"] = list(object_properties)
             for value in node.values():
                 normalize(value)
         elif isinstance(node, list):

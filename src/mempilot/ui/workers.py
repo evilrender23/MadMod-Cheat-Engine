@@ -9,7 +9,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, QTimer, Signal, Slot
 
 from mempilot.core.backend import MemoryBackend, ModuleInfo
 from mempilot.core.data_types import NUMERIC_TYPES, DataType, decode_value, encode_value, type_size
@@ -532,7 +532,10 @@ def start_worker(worker: _BaseWorker, on_finished: Callable[[], None]) -> QThrea
         raise ValueError("Un worker debe crearse sin padre antes de moverlo a un QThread.")
     thread = QThread()
     worker.moveToThread(thread)
-    thread.started.connect(worker.run)
+    thread.started.connect(
+        lambda: QMetaObject.invokeMethod(worker, "run", Qt.ConnectionType.QueuedConnection),
+        Qt.ConnectionType.DirectConnection,
+    )
     worker.finished.connect(on_finished)
     worker.finished.connect(worker.deleteLater)
     worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)

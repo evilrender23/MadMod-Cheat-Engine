@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from tests.fixtures.fake_backend import FakeMemoryBackend
 
-from mempilot.core.backend import Architecture, ProcessIdentity
+from mempilot.core.backend import Architecture, MemoryRegion, ProcessIdentity
 from mempilot.core.data_types import DataType, encode_value, numpy_dtype
 from mempilot.core.scanner import (
     CandidateSet,
@@ -30,6 +30,24 @@ def make_backend() -> FakeMemoryBackend:
     for index, value in enumerate(CURRENT):
         memory[index * 4 : index * 4 + 4] = encode_value(DataType.INT32, str(value))
     return FakeMemoryBackend([(BASE, memory, 0x04)], IDENTITY)
+
+
+class _TypedRegionBackend(FakeMemoryBackend):
+    def __init__(
+        self,
+        regions: list[tuple[int, bytearray, int, int]],
+    ) -> None:
+        self._typed_regions = regions
+        super().__init__(
+            [(base, data, protect) for base, data, protect, _region_type in regions],
+            IDENTITY,
+        )
+
+    def regions(self) -> list[MemoryRegion]:
+        return [
+            MemoryRegion(base, len(data), protect, 0x1000, region_type)
+            for base, data, protect, region_type in self._typed_regions
+        ]
 
 
 @pytest.mark.parametrize(
@@ -93,3 +111,36 @@ def test_unknown_snapshot_respects_budget_and_refines_changed_values() -> None:
 
     assert result.addresses.tolist() == [BASE + 12]
     assert result.values.tolist() == [73]
+
+
+def test_unknown_snapshot_prioritizes_private_then_image_within_budget() -> None:
+    one_mb = 1 << 20
+    mapped_base = 0x100000
+    image_base = 0x300000
+    private_base = 0x500000
+    backend = _TypedRegionBackend(
+        [
+            (mapped_base, bytearray(one_mb), 0x04, 0x40000),
+            (image_base, bytearray(one_mb), 0x04, 0x1000000),
+            (private_base, bytearray(one_mb), 0x04, 0x20000),
+        ]
+    )
+    request = ScanRequest(
+        DataType.INT32,
+        ScanMode.UNKNOWN_INITIAL,
+        None,
+        None,
+        ScanOptions(
+            writable_only=False,
+            include_mapped=True,
+            unknown_budget_mb=2,
+            chunk_size=one_mb,
+        ),
+    )
+
+    snapshot = ScanEngine(backend).first_scan(request, threading.Event(), lambda _progress: None)
+
+    assert isinstance(snapshot, UnknownSnapshot)
+    assert [base for base, _raw in snapshot.chunks] == [private_base, image_base]
+    assert snapshot.bytes_captured == 2 * one_mb
+    assert snapshot.regions_skipped == 1

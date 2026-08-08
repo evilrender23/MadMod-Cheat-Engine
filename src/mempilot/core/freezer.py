@@ -8,6 +8,7 @@ from typing import Protocol
 
 from mempilot.core.backend import MemoryBackend
 from mempilot.core.data_types import encode_value
+from mempilot.core.exceptions import MemPilotError
 from mempilot.core.watcher import WatchEntry
 
 MAX_FREEZE_WRITES_PER_TICK = 32
@@ -91,7 +92,7 @@ class FreezeController:
                 continue
             try:
                 desired = self.desired_bytes(entry)
-            except (TypeError, ValueError) as exc:
+            except (MemPilotError, TypeError, ValueError) as exc:
                 result.errors[entry.id] = str(exc)
                 continue
             if target.current == desired:

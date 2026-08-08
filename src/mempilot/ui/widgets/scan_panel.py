@@ -6,7 +6,7 @@ from itertools import pairwise
 from typing import cast
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QDoubleValidator, QKeySequence, QStandardItemModel
+from PySide6.QtGui import QDoubleValidator, QStandardItemModel
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -182,12 +182,10 @@ class ScanPanel(QWidget):
         buttons.setSpacing(SPACE_1)
         self.first_button = QPushButton(t("action.first_scan"), self)
         self.first_button.setAccessibleName(t("action.first_scan"))
-        self.first_button.setShortcut(QKeySequence("F5"))
         self.first_button.setProperty("primary", True)
         self.first_button.clicked.connect(self._emit_first)
         self.next_button = QPushButton(t("action.next_scan"), self)
         self.next_button.setAccessibleName(t("action.next_scan"))
-        self.next_button.setShortcut(QKeySequence("F6"))
         self.next_button.clicked.connect(self._emit_next)
         buttons.addWidget(self.first_button)
         buttons.addWidget(self.next_button)
@@ -197,11 +195,9 @@ class ScanPanel(QWidget):
         secondary.setSpacing(SPACE_1)
         self.reset_button = QPushButton(t("action.reset"), self)
         self.reset_button.setAccessibleName(t("action.reset"))
-        self.reset_button.setShortcut(QKeySequence("Ctrl+R"))
         self.reset_button.clicked.connect(self.reset_requested)
         self.cancel_button = QPushButton(t("action.cancel"), self)
         self.cancel_button.setAccessibleName(t("action.cancel"))
-        self.cancel_button.setShortcut(QKeySequence("Esc"))
         self.cancel_button.clicked.connect(self.cancel_requested)
         secondary.addWidget(self.reset_button)
         secondary.addWidget(self.cancel_button)

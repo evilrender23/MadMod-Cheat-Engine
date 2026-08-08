@@ -28,7 +28,10 @@ def make_session() -> ScanSession:
         regions_scanned=1,
         bytes_scanned=64,
         duration_s=0.25,
-        memory_regions=[MemoryRegion(BASE, 64, 0x04, 0x1000, 0x20000, "page.exe")],
+        memory_regions=[
+            MemoryRegion(BASE, 10, 0x04, 0x1000, 0x20000, "page.exe"),
+            MemoryRegion(BASE + 10, 54, 0x04, 0x1000, 0x20000, "helper.dll"),
+        ],
     )
     return session
 
@@ -49,7 +52,9 @@ def test_page_applies_order_offset_limit_and_text_filter() -> None:
     assert [row.address for row in filtered] == [BASE + 8]
     assert [row.address for row in ranged] == [BASE + 12, BASE + 8]
     assert filtered[0].region == "page.exe+0x8"
+    by_module = session.page(0, 10, OrderSpec(), FilterSpec(module="HELPER.DLL"))
     assert filtered[0].writable is True
+    assert [row.address for row in by_module] == [BASE + 12]
 
 
 def test_refinement_records_history_and_previous_values() -> None:
@@ -70,6 +75,20 @@ def test_refinement_records_history_and_previous_values() -> None:
     assert row.previous == "20"
     assert session.history[0].candidates_before == 3
     assert session.history[0].candidates_after == 1
+    empty = CandidateSet(
+        addresses=np.empty(0, dtype=np.uint64),
+        values=np.empty(0, dtype=numpy_dtype(DataType.INT32)),
+        data_type=DataType.INT32,
+    )
+    exact = ScanRequest(DataType.INT32, ScanMode.EXACT, "999", None, session.options)
+    session.set_refined_result(empty, exact, duration_s=0.05)
+
+    assert session.total() == 0
+    history_counts = [
+        (record.index, record.candidates_before, record.candidates_after)
+        for record in session.history
+    ]
+    assert history_counts == [(1, 3, 1), (2, 1, 0)]
 
 
 def test_refresh_values_updates_materialized_value_and_change_rate() -> None:

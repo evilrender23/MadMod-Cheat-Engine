@@ -94,8 +94,10 @@ def test_workspace_contains_no_runtime_or_secret_data(tmp_path: Path) -> None:
 
     save_workspace(path, workspace)
 
-    document = json.loads(path.read_text(encoding="utf-8"))
-    assert "pid" not in document
-    assert "handle" not in document
-    assert "resolved_address" not in document
-    assert "sk-" not in path.read_text(encoding="utf-8")
+    raw = path.read_text(encoding="utf-8")
+    document = json.loads(raw)
+    assert document["notes"] == "accidental ***"
+    assert '"pid"' not in raw
+    assert '"handle"' not in raw
+    assert '"resolved_address"' not in raw
+    assert "sk-" not in raw

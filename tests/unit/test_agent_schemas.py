@@ -14,6 +14,14 @@ class _ControllerStub:
     pass
 
 
+class _NestedLeaf(BaseModel):
+    value: str
+
+
+class _NestedArgs(BaseModel):
+    leaves: list[_NestedLeaf]
+
+
 def _walk_objects(node: Any) -> None:
     if isinstance(node, dict):
         assert "default" not in node
@@ -28,9 +36,11 @@ def _walk_objects(node: Any) -> None:
             "dependentSchemas",
         }:
             assert keyword not in node
-        if isinstance(node.get("properties"), dict):
+        properties = node.get("properties")
+        if node.get("type") == "object" or isinstance(properties, dict):
+            object_properties = properties if isinstance(properties, dict) else {}
             assert node["additionalProperties"] is False
-            assert node["required"] == list(node["properties"])
+            assert node["required"] == list(object_properties)
         for value in node.values():
             _walk_objects(value)
     elif isinstance(node, list):
@@ -52,14 +62,25 @@ def test_every_tool_has_flat_strict_responses_schema() -> None:
         _walk_objects(spec["parameters"])
 
 
-def test_arguments_reject_unknown_fields() -> None:
-    with pytest.raises(ValidationError):
-        ListProcessesArgs.model_validate({"query": None, "unexpected": True})
+def test_every_tool_argument_model_rejects_unknown_fields() -> None:
+    registry = ToolRegistry(_ControllerStub(), AgentPolicy())  # type: ignore[arg-type]
+
+    for tool in registry.tools:
+        with pytest.raises(ValidationError) as captured:
+            tool.args_model.model_validate({"unexpected": True})
+        assert any(error["type"] == "extra_forbidden" for error in captured.value.errors())
 
 
 def test_optional_fields_are_still_required_by_strict_contract() -> None:
     with pytest.raises(ValidationError):
         ListProcessesArgs.model_validate({})
+
+
+def test_strict_schema_normalizes_nested_defs_recursively() -> None:
+    schema = strict_schema(_NestedArgs)
+
+    _walk_objects(schema)
+    assert schema["$defs"]["_NestedLeaf"]["additionalProperties"] is False
 
 
 class _RejectedKeywordModel(BaseModel):
