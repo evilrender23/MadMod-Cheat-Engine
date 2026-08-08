@@ -78,11 +78,12 @@ class ScanPanel(QWidget):
         self.mode_combo.currentIndexChanged.connect(self._on_mode_changed)
         form.addRow(t("scan.condition"), self.mode_combo)
 
+        self.value_label = QLabel(t("scan.value"), self)
         self.value_edit = QLineEdit(self)
         self.value_edit.setAccessibleName(t("scan.value"))
         self.value_edit.setFont(monospace_font())
         self.value_edit.textChanged.connect(self._validate)
-        form.addRow(t("scan.value"), self.value_edit)
+        form.addRow(self.value_label, self.value_edit)
 
         self.value2_label = QLabel(t("scan.value2"), self)
         self.value2_edit = QLineEdit(self)
@@ -258,7 +259,7 @@ class ScanPanel(QWidget):
             include_image=self.image_check.isChecked(),
             include_mapped=self.mapped_check.isChecked(),
             use_tolerance=self.tolerance_check.isChecked(),
-            float_tolerance=float(tolerance_text),
+            float_tolerance=self._parse_tolerance(tolerance_text),
             case_sensitive=self.case_check.isChecked(),
             chunk_size=self._settings.scan.chunk_size,
             max_candidates=self._settings.scan.max_candidates,
@@ -296,9 +297,8 @@ class ScanPanel(QWidget):
         mode = self.current_mode()
         data_type = self.current_data_type()
         needs_value = mode not in _VALUELESS_MODES
+        self.value_label.setVisible(needs_value)
         self.value_edit.setVisible(needs_value)
-        label = self.sender()
-        del label
         self.value2_label.setVisible(mode is ScanMode.BETWEEN)
         self.value2_edit.setVisible(mode is ScanMode.BETWEEN)
         is_float = data_type in FLOAT_TYPES
@@ -355,7 +355,12 @@ class ScanPanel(QWidget):
         )
         self.stats["refinements"].setText(str(status.refinements))
         mode = status.last_mode
-        self.stats["last"].setText(t(_MODE_KEYS[mode]) if mode is not None else "—")
+        data_type = status.data_type
+        self.stats["last"].setText(
+            f"{t(f'data_type.{data_type.value}')} · {t(_MODE_KEYS[mode])}"
+            if mode is not None and data_type is not None
+            else "—"
+        )
 
     def reset_form_state(self) -> None:
         """Return UI session controls to first-scan mode for the same process."""
@@ -403,6 +408,16 @@ class ScanPanel(QWidget):
             ScanMode.GREATER_THAN,
             ScanMode.LESS_THAN,
         ]
+
+    @staticmethod
+    def _parse_tolerance(text: str) -> float:
+        try:
+            value = float(text)
+        except ValueError:
+            raise ValueError(t("scan.validation.tolerance")) from None
+        if value < 0:
+            raise ValueError(t("scan.validation.tolerance"))
+        return value
 
     @staticmethod
     def _parse_address(text: str) -> int:

@@ -68,7 +68,8 @@ class ProcessModel(QAbstractTableModel):
                 entry.architecture.value,
                 entry.username or "—",
                 entry.path or "—",
-                entry.note or ("Disponible" if entry.can_attach else "No disponible"),
+                entry.note
+                or (t("process.available") if entry.can_attach else t("process.unavailable")),
             )
             return values[index.column()]
         if role == int(Qt.ItemDataRole.UserRole):

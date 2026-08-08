@@ -87,7 +87,7 @@ class TopBar(QFrame):
         )
         state = t("status.connected")
         self.connection_label.setText(self._connection_text("●", state))
-        self.connection_label.setProperty("tone", "success")
+        self.connection_label.setProperty("tone", "success" if write_access else "warning")
         self.connection_label.setAccessibleName(t("top.connection_accessible", state=state))
         self.connection_label.style().unpolish(self.connection_label)
         self.connection_label.style().polish(self.connection_label)

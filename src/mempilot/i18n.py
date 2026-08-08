@@ -205,6 +205,19 @@ STRINGS: dict[str, str] = {
     "chat.activity": "Actividad",
     "chat.user": "Tú",
     "chat.agent": "Asistente",
+    "chat.thinking": "Pensando…",
+    "chat.autonomous.title": "Activar modo autónomo",
+    "chat.autonomous.permissions": (
+        "Permisos concedidos para {name} (PID {pid}):\n"
+        "• Escribir en {name}.\n"
+        "• Congelar valores.\n"
+        "• Máximo {limit} escrituras.\n"
+        "• No puede cambiar de proceso ni ampliar permisos."
+    ),
+    "chat.autonomous.consent": "Entiendo y concedo estos permisos para este proceso.",
+    "chat.autonomous.needs_process": (
+        "Selecciona primero un proceso. El permiso autónomo queda vinculado a su identidad."
+    ),
     "settings.title": "Ajustes",
     "settings.scan_tab": "Escaneo",
     "settings.ui_tab": "Interfaz",
@@ -389,6 +402,8 @@ STRINGS: dict[str, str] = {
     "cli.no_ai": "Inicia con el asistente de IA desactivado.",
     "cli.memory_lab": "Inicia el proceso de laboratorio.",
     "cli.log_level": "Nivel de detalle del registro.",
+    "process.available": "Disponible",
+    "process.unavailable": "No disponible",
 }
 
 

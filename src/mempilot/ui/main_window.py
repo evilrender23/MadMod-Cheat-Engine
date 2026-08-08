@@ -16,6 +16,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mempilot.agent.orchestrator import (
+    AgentOrchestrator,
+    ConfirmationRequest,
+)
+from mempilot.agent.policies import AgentMode
 from mempilot.config.settings import Settings
 from mempilot.controller import Actor, AppController
 from mempilot.core.data_types import DataType, format_hex
@@ -29,7 +34,7 @@ from mempilot.ui.dialogs.attach_dialog import AttachDialog
 from mempilot.ui.dialogs.confirm_dialog import ConfirmDialog
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
 from mempilot.ui.dialogs.settings_dialog import SettingsDialog
-from mempilot.ui.widgets.chat_panel import ChatPanel
+from mempilot.ui.widgets.chat_panel import AutonomousConsentDialog, ChatPanel
 from mempilot.ui.widgets.results_view import ResultsView
 from mempilot.ui.widgets.scan_panel import ScanPanel
 from mempilot.ui.widgets.status_bar import StatusBar
@@ -46,11 +51,14 @@ class MainWindow(QMainWindow):
         settings: Settings | None = None,
         settings_service: SettingsService | None = None,
         parent: QWidget | None = None,
+        *,
+        orchestrator: AgentOrchestrator | None = None,
     ) -> None:
         super().__init__(parent)
         self.controller = controller
         self.settings = settings or Settings()
         self.settings_service = settings_service or SettingsService()
+        self.orchestrator = orchestrator
         self._layout_settings = QSettings("MemPilot", "MemPilot")
         self._write_confirmation_enabled = True
         self._last_write_access = False
@@ -75,8 +83,10 @@ class MainWindow(QMainWindow):
         self.results_view = ResultsView(
             self.controller, self.settings.ui.results_page_size, central
         )
-        # Wave 3 will enable the provider; the local no-AI experience is complete now.
-        self.chat_panel = ChatPanel(ai_enabled=False, parent=central)
+        self.chat_panel = ChatPanel(
+            ai_enabled=self.orchestrator is not None and self.orchestrator.available,
+            parent=central,
+        )
         self.horizontal_splitter = QSplitter(Qt.Orientation.Horizontal, central)
         self.horizontal_splitter.addWidget(self.scan_panel)
         self.horizontal_splitter.addWidget(self.results_view)
@@ -121,6 +131,14 @@ class MainWindow(QMainWindow):
         self.results_view.error_raised.connect(self.show_error)
         self.watch_view.workspace_saved.connect(self._workspace_saved)
         self.watch_view.workspace_loaded.connect(self._workspace_loaded)
+        if self.orchestrator is not None:
+            self.chat_panel.message_submitted.connect(self._submit_agent_message)
+            self.chat_panel.mode_changed.connect(self._request_agent_mode)
+            self.orchestrator.response_ready.connect(self.chat_panel.add_agent_message)
+            self.orchestrator.activity.connect(self.chat_panel.add_activity)
+            self.orchestrator.confirmation_requested.connect(self._show_agent_confirmation)
+            self.orchestrator.busy_changed.connect(self.chat_panel.set_busy)
+            self.orchestrator.mode_changed.connect(self.chat_panel.set_mode)
 
     def _connect_controller(self) -> None:
         self.controller.attached.connect(self._on_attached)
@@ -136,15 +154,17 @@ class MainWindow(QMainWindow):
 
     def _install_global_actions(self) -> None:
         specs = (
-            ("attach", "Ctrl+P", self.select_process),
-            ("save", "Ctrl+S", self.save_workspace),
-            ("load", "Ctrl+O", self.load_workspace),
-            ("lab", "Ctrl+L", self.launch_memory_lab),
-            ("help", "F1", self.show_help),
+            ("attach", t("action.attach"), "Ctrl+P", self.select_process),
+            ("save", t("action.save_workspace"), "Ctrl+S", self.save_workspace),
+            ("load", t("action.load_workspace"), "Ctrl+O", self.load_workspace),
+            ("lab", t("action.memory_lab"), "Ctrl+L", self.launch_memory_lab),
+            ("help", t("help.title"), "F1", self.show_help),
         )
         self.global_actions: dict[str, QAction] = {}
-        for name, sequence, callback in specs:
-            action = QAction(self)
+        for name, label, sequence, callback in specs:
+            action = QAction(label, self)
+            action.setStatusTip(label)
+            action.setToolTip(f"{label} ({sequence})")
             action.setShortcut(QKeySequence(sequence))
             action.setShortcutContext(Qt.ShortcutContext.WindowShortcut)
             action.triggered.connect(callback)
@@ -158,6 +178,56 @@ class MainWindow(QMainWindow):
             self.top_bar.set_attached(identity, self._last_write_access)
         self.scan_panel.set_session_state(self.controller.scan_status().state, attached)
 
+    @Slot(str)
+    def _submit_agent_message(self, text: str) -> None:
+        if self.orchestrator is None:
+            return
+        try:
+            self.orchestrator.submit(text)
+        except Exception as exc:
+            self.show_error(exc)
+
+    @Slot(str)
+    def _request_agent_mode(self, raw_mode: str) -> None:
+        if self.orchestrator is None:
+            return
+        if raw_mode == AgentMode.GUIDED.value:
+            self.orchestrator.set_guided_mode()
+            return
+        if raw_mode != AgentMode.AUTONOMOUS.value:
+            self.chat_panel.set_mode(self.orchestrator.policy.mode.value)
+            return
+        identity = self.controller.attached_identity()
+        if identity is None:
+            QMessageBox.information(
+                self,
+                t("chat.autonomous.title"),
+                t("chat.autonomous.needs_process"),
+            )
+            self.chat_panel.set_mode(AgentMode.GUIDED.value)
+            return
+        consent = AutonomousConsentDialog(
+            identity.name,
+            identity.pid,
+            self.orchestrator.policy.write_limit,
+            self,
+        )
+        if (
+            consent.exec() is not QDialog.DialogCode.Accepted
+            or not self.orchestrator.activate_autonomous_mode()
+        ):
+            self.chat_panel.set_mode(AgentMode.GUIDED.value)
+
+    @Slot(object)
+    def _show_agent_confirmation(self, raw_request: object) -> None:
+        if not isinstance(raw_request, ConfirmationRequest):
+            return
+        self.chat_panel.show_confirmation(
+            raw_request.detail,
+            raw_request.confirm,
+            raw_request.reject,
+        )
+
     @Slot()
     def select_process(self) -> None:
         dialog = AttachDialog(self.controller, self.settings.ui.show_system_processes, self)
@@ -169,6 +239,8 @@ class MainWindow(QMainWindow):
                 "success",
             )
             self._refresh_modules()
+            if self.orchestrator is not None:
+                self.orchestrator.note_write_access(dialog.write_access)
 
     @Slot()
     def detach_process(self) -> None:
@@ -311,6 +383,8 @@ class MainWindow(QMainWindow):
         self._last_write_access = True
         self.top_bar.set_attached(identity, True)
         self._refresh_modules()
+        if self.orchestrator is not None:
+            self.orchestrator.note_write_access(True)
 
     @Slot()
     def open_settings(self) -> None:

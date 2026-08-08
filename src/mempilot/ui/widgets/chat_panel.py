@@ -6,7 +6,10 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -74,6 +77,10 @@ class ChatPanel(QWidget):
         self.writes_label.setProperty("tone", "warning")
         self.writes_label.setVisible(False)
         layout.addWidget(self.writes_label)
+        self.thinking_label = QLabel(t("chat.thinking"), self)
+        self.thinking_label.setProperty("tone", "info")
+        self.thinking_label.setVisible(False)
+        layout.addWidget(self.thinking_label)
 
         self.disabled_card = QFrame(self)
         self.disabled_card.setProperty("card", True)
@@ -133,6 +140,21 @@ class ChatPanel(QWidget):
         self.disabled_card.setVisible(not enabled)
         self.mode_combo.setEnabled(enabled)
         self.mode_combo.setToolTip("" if enabled else t("agent.disabled"))
+
+    def set_busy(self, busy: bool) -> None:
+        """Expose provider activity without blocking the rest of the application."""
+        self.thinking_label.setVisible(busy)
+        self.input_edit.setEnabled(self._ai_enabled and not busy)
+        self.send_button.setEnabled(self._ai_enabled and not busy)
+
+    def set_mode(self, mode: str) -> None:
+        """Synchronize the selector without recursively requesting a mode change."""
+        index = self.mode_combo.findData(mode)
+        if index < 0 or index == self.mode_combo.currentIndex():
+            return
+        blocked = self.mode_combo.blockSignals(True)
+        self.mode_combo.setCurrentIndex(index)
+        self.mode_combo.blockSignals(blocked)
 
     def add_user_message(self, text: str) -> None:
         self._append_message("user", t("chat.user"), text)
@@ -244,3 +266,45 @@ class ChatPanel(QWidget):
     def _scroll_to_bottom(self) -> None:
         bar = self.history_scroll.verticalScrollBar()
         bar.setValue(bar.maximum())
+
+
+class AutonomousConsentDialog(QDialog):
+    """Explicit, process-bound permission grant required before autonomous mode."""
+
+    def __init__(
+        self,
+        process_name: str,
+        pid: int,
+        write_limit: int,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(t("chat.autonomous.title"))
+        layout = QVBoxLayout(self)
+        explanation = QLabel(
+            t(
+                "chat.autonomous.permissions",
+                name=process_name,
+                pid=pid,
+                limit=write_limit,
+            ),
+            self,
+        )
+        explanation.setWordWrap(True)
+        explanation.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(explanation)
+        self.consent = QCheckBox(t("chat.autonomous.consent"), self)
+        self.consent.setAccessibleName(t("chat.autonomous.consent"))
+        layout.addWidget(self.consent)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            self,
+        )
+        accept = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        accept.setText(t("confirm.accept"))
+        accept.setEnabled(False)
+        self.buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(t("confirm.reject"))
+        self.consent.toggled.connect(accept.setEnabled)
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
