@@ -1,4 +1,4 @@
-"""MemPilot application palette, tokens, and focused widget styling."""
+"""M@D-Engine application palette, tokens, and focused widget styling."""
 
 from __future__ import annotations
 

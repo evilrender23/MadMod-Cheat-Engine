@@ -1,1 +1,1 @@
-"""Reusable widgets for the MemPilot desktop interface."""
+"""Reusable widgets for the M@D-Engine desktop interface."""

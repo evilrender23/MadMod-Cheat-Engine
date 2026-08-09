@@ -1,14 +1,19 @@
-"""Command-line entry point for MemPilot and its bundled Memory Lab."""
+"""Command-line entry point for M@D-Engine and its bundled Memory Lab."""
 
 from __future__ import annotations
 
 import argparse
 import sys
 
+from PySide6.QtCore import QTimer
+
 from mempilot.app import create_app
 from mempilot.i18n import t
 from mempilot.lab.memory_lab_app import run_lab
 from mempilot.logging_setup import setup_logging
+from mempilot.ui.splash import create_splash
+
+_SPLASH_DURATION_MS = 2400
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -32,7 +37,15 @@ def main(argv: list[str] | None = None) -> int:
     if options.memory_lab:
         return run_lab([])
     app, window = create_app([sys.argv[0]], no_ai=options.no_ai)
-    window.show()
+    splash = create_splash()
+    splash.show()
+    app.processEvents()
+
+    def reveal_window() -> None:
+        window.show()
+        splash.finish(window)
+
+    QTimer.singleShot(_SPLASH_DURATION_MS, reveal_window)
     return app.exec()
 
 

@@ -12,6 +12,7 @@ import mempilot.ui.dialogs.settings_dialog as settings_dialog_module
 import mempilot.ui.main_window as main_window_module
 from mempilot.agent.providers import ScriptedProvider
 from mempilot.app import create_app
+from mempilot.branding import APP_NAME, ORGANIZATION_NAME
 from mempilot.config.settings import AISettings, CLIBackend, Settings
 from mempilot.controller import AppController
 from mempilot.core.backend import Architecture, ProcessIdentity
@@ -95,7 +96,7 @@ def test_main_window_applies_integer_accepted_result_and_reopens_saved_ai_settin
         "create_cli_provider",
         lambda _settings: replacement_provider,
     )
-    _app, window = create_app(
+    app, window = create_app(
         [],
         controller=controller,
         settings=initial,
@@ -104,6 +105,9 @@ def test_main_window_applies_integer_accepted_result_and_reopens_saved_ai_settin
     )
     qtbot.addWidget(window)
     window.show()
+    assert app.applicationName() == APP_NAME
+    assert app.organizationName() == ORGANIZATION_NAME
+    assert not app.windowIcon().isNull()
 
     window.open_settings()
 

@@ -1,1 +1,1 @@
-"""Qt user-interface package for MemPilot."""
+"""Qt user-interface package for M@D-Engine."""

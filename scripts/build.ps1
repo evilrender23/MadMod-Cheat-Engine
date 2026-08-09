@@ -12,7 +12,8 @@ $PyInstallerArgs = @(
     "--clean",
     "--onedir",
     "--windowed",
-    "--name", "MemPilot",
+    "--name", "M@D-Engine",
+    "--icon", "assets\mad-mod-engine.ico",
     "--paths", "src",
     "--add-data", "assets;assets",
     "--collect-submodules", "mempilot",
@@ -27,8 +28,8 @@ $PyInstallerArgs = @(
 )
 & .\.venv\Scripts\pyinstaller.exe @PyInstallerArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-if (Test-Path MemPilot.spec) { Remove-Item -Force MemPilot.spec }
+if (Test-Path "M@D-Engine.spec") { Remove-Item -Force "M@D-Engine.spec" }
 
 
-$Executable = [System.IO.Path]::GetFullPath("dist\MemPilot\MemPilot.exe")
+$Executable = [System.IO.Path]::GetFullPath("dist\M@D-Engine\M@D-Engine.exe")
 Write-Output $Executable

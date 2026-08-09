@@ -1,1 +1,1 @@
-"""Typed AI-agent safety boundary for MemPilot."""
+"""Typed AI-agent safety boundary for M@D-Engine."""

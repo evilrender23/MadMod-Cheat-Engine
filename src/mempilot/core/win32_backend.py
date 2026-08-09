@@ -77,7 +77,7 @@ class Win32MemoryBackend(MemoryBackend):
             error = ctypes.get_last_error()
             if error == ERROR_ACCESS_DENIED:
                 raise AccessDeniedError(
-                    f"Acceso denegado al PID {identity.pid}. Ejecuta MemPilot como administrador "
+                    f"Acceso denegado al PID {identity.pid}. Ejecuta M@D-Engine como administrador "
                     "o elige un proceso de tu mismo nivel de integridad."
                 )
             raise ProcessNotFoundError(

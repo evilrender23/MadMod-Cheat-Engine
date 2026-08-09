@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mempilot.branding import APP_NAME, ORGANIZATION_NAME
 from mempilot.controller import Actor, AppController
 from mempilot.core.data_types import NUMERIC_TYPES, DataType
 from mempilot.core.watcher import WatchEntry, WatchSpec
@@ -151,7 +152,7 @@ class WatchView(QWidget):
     def __init__(self, controller: AppController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller = controller
-        self._settings = QSettings("MemPilot", "MemPilot")
+        self._settings = QSettings(ORGANIZATION_NAME, APP_NAME)
         self.model = WatchModel(controller, self)
         self.model.operation_failed.connect(self._show_error)
 

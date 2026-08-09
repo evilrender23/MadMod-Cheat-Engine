@@ -1,8 +1,8 @@
-# Plan de MemPilot
+# Plan de M@D-Engine
 
 ## Arquitectura
 
-MemPilot separa presentación, fachada, dominio y acceso Win32. `AppController` es la única fachada compartida por la GUI y el agente. El escáner usa un trabajador único y núcleos NumPy; la vigilancia y el congelado comparten un planificador. El agente sólo ejecuta herramientas Pydantic tipadas y aplica una política ligada a la identidad del proceso.
+M@D-Engine separa presentación, fachada, dominio y acceso Win32. `AppController` es la única fachada compartida por la GUI y el agente. El escáner usa un trabajador único y núcleos NumPy; la vigilancia y el congelado comparten un planificador. El agente sólo ejecuta herramientas Pydantic tipadas y aplica una política ligada a la identidad del proceso.
 
 ## Hitos
 

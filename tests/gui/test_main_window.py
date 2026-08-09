@@ -11,6 +11,7 @@ from pytestqt.qtbot import QtBot
 from tests.fixtures.fake_backend import FakeMemoryBackend
 from tests.integration._target import TargetProcess
 
+from mempilot.branding import APP_NAME, LOGO_FILENAME, PRODUCT_NAME, asset_path
 from mempilot.config.settings import ScanSettings, Settings, UISettings
 from mempilot.controller import AppController
 from mempilot.core.backend import Architecture, ProcessIdentity
@@ -18,6 +19,7 @@ from mempilot.services.audit_service import AuditService
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.attach_dialog import AttachDialog
 from mempilot.ui.main_window import MainWindow
+from mempilot.ui.splash import create_splash
 
 pytestmark = pytest.mark.gui
 
@@ -69,6 +71,23 @@ def _window(
     qtbot.addWidget(window)
     window.show()
     return window, controller, backend
+
+
+def test_window_and_splash_use_mad_mod_engine_brand(
+    tmp_path: Path,
+    qtbot: QtBot,
+) -> None:
+    window, _controller, _backend = _window(tmp_path, qtbot)
+    splash = create_splash()
+    qtbot.addWidget(splash)
+
+    assert window.windowTitle() == APP_NAME
+    assert PRODUCT_NAME == "Mad Mod Engine"
+    assert asset_path(LOGO_FILENAME).is_file()
+    assert splash.objectName() == "madModEngineSplash"
+    assert splash.pixmap().size().width() == 520
+    assert splash.pixmap().size().height() == 520
+    window.close()
 
 
 def test_window_opens_and_process_selector_lists_child(tmp_path: Path, qtbot: QtBot) -> None:

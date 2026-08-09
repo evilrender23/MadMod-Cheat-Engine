@@ -3,9 +3,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mempilot"
+name = "mad-mod-engine"
 version = "1.0.0"
-description = "Inspector y editor autorizado de memoria de procesos para Windows"
+description = "Mad Mod Engine: inspector y editor autorizado de memoria para Windows"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
 dependencies = [
@@ -19,7 +19,7 @@ dependencies = [
 dev = ["pytest>=8.3", "pytest-qt>=4.4", "pytest-timeout>=2.3", "ruff>=0.6", "mypy>=1.11", "pyinstaller>=6.10"]
 
 [project.scripts]
-mempilot = "mempilot.__main__:main"
+mad-mod-engine = "mempilot.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

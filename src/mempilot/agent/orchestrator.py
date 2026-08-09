@@ -340,7 +340,7 @@ class AgentOrchestrator(QObject):
                 _error_json(
                     "unknown_tool",
                     "La herramienta solicitada no existe.",
-                    "Usa una herramienta publicada por MemPilot.",
+                    "Usa una herramienta publicada por M@D-Engine.",
                 ),
             )
             return

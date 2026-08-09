@@ -823,7 +823,7 @@ class AppController(QObject):
         if not self._backend.is_alive():
             pid = identity.pid
             self.process_lost.emit(pid)
-            self._detach_internal("El proceso terminó y MemPilot se desacopló.", Actor.USER)
+            self._detach_internal("El proceso terminó y M@D-Engine se desacopló.", Actor.USER)
             raise ProcessExitedError(
                 f"El proceso PID {pid} terminó. Selecciona otro proceso para continuar."
             )
@@ -1015,7 +1015,7 @@ class AppController(QObject):
         identity = self._backend.identity
         if identity is not None:
             self.process_lost.emit(identity.pid)
-            self._detach_internal("El proceso terminó y MemPilot se desacopló.", Actor.USER)
+            self._detach_internal("El proceso terminó y M@D-Engine se desacopló.", Actor.USER)
 
     @Slot(str)
     def _on_watch_write_error(self, message: str) -> None:

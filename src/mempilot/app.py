@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from mempilot import __version__
@@ -11,6 +12,13 @@ from mempilot.agent.orchestrator import AgentOrchestrator
 from mempilot.agent.policies import AgentMode, AgentPolicy
 from mempilot.agent.providers import AIProvider, create_cli_provider
 from mempilot.agent.tools import ToolRegistry
+from mempilot.branding import (
+    APP_NAME,
+    LOGO_FILENAME,
+    ORGANIZATION_DOMAIN,
+    ORGANIZATION_NAME,
+    asset_path,
+)
 from mempilot.config.paths import ensure_dirs
 from mempilot.config.settings import Settings
 from mempilot.controller import AppController
@@ -42,11 +50,12 @@ def create_app(
         app = existing
     else:
         raise RuntimeError("Existe una instancia Qt que no es QApplication.")
-    app.setApplicationName("MemPilot")
-    app.setApplicationDisplayName("MemPilot")
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_NAME)
     app.setApplicationVersion(__version__)
-    app.setOrganizationName("MemPilot")
-    app.setOrganizationDomain("mempilot.local")
+    app.setOrganizationName(ORGANIZATION_NAME)
+    app.setOrganizationDomain(ORGANIZATION_DOMAIN)
+    app.setWindowIcon(QIcon(str(asset_path(LOGO_FILENAME))))
     apply_theme(app)
     existing_policy = getattr(controller, "_agent_policy", None) if controller is not None else None
     policy = (

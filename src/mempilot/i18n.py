@@ -1,7 +1,7 @@
 """Central Spanish user-interface strings."""
 
 STRINGS: dict[str, str] = {
-    "app.name": "MemPilot",
+    "app.name": "M@D-Engine",
     "app.version": "Versión {version}",
     "action.attach": "Seleccionar proceso…",
     "action.detach": "Desacoplar",
@@ -211,11 +211,11 @@ STRINGS: dict[str, str] = {
     "chat.user": "Tú",
     "chat.agent": "Asistente",
     "chat.thinking": "Pensando…",
-    "overlay.title": "MemPilot Overlay",
+    "overlay.title": "M@D-Engine Overlay",
     "overlay.hide": "Ocultar",
     "overlay.hotkey_hint": "Ocultar: Pause, Ctrl+Shift+º o Esc",
     "overlay.history": "Conversación del overlay",
-    "overlay.chat_input": "Habla con MemPilot",
+    "overlay.chat_input": "Habla con M@D-Engine",
     "overlay.no_process": "No hay un proceso adjunto.",
     "overlay.process": "{name} · PID {pid} · {access}",
     "overlay.manual": "Ajustes manuales",
@@ -235,7 +235,7 @@ STRINGS: dict[str, str] = {
     "overlay.trainer.deactivated": "Truco desactivado.",
     "overlay.watch": "Vigilancia",
     "overlay.value": "Valor nuevo o deseado",
-    "overlay.no_watches": "Añade una dirección a vigilancia desde MemPilot para ajustarla aquí.",
+    "overlay.no_watches": "Añade una dirección a vigilancia desde M@D-Engine para ajustarla aquí.",
     "overlay.watch_info": "Tipo: {type} · Actual: {current} · Congelado: {frozen}",
     "overlay.yes": "sí",
     "overlay.no": "no",
@@ -298,7 +298,7 @@ STRINGS: dict[str, str] = {
     "error.unknown": "Se produjo un error inesperado. Inténtalo de nuevo.",
     "workspace.save_title": "Guardar workspace",
     "workspace.load_title": "Cargar workspace",
-    "workspace.filter": "Workspace de MemPilot (*.json)",
+    "workspace.filter": "Workspace de M@D-Engine (*.json)",
     "watch.column.name": "Nombre",
     "watch.column.address": "Dirección",
     "watch.column.type": "Tipo",
@@ -374,7 +374,7 @@ STRINGS: dict[str, str] = {
     ),
     "watch.workspace.save_title": "Guardar workspace",
     "watch.workspace.load_title": "Cargar workspace",
-    "watch.workspace.filter": "Workspace de MemPilot (*.json)",
+    "watch.workspace.filter": "Workspace de M@D-Engine (*.json)",
     "pointer.title": "Cadena de punteros",
     "pointer.default_name": "Nueva cadena",
     "pointer.label.name": "Nombre",
@@ -439,7 +439,7 @@ STRINGS: dict[str, str] = {
     "status.attached_ok": "Adjunto a {name} (PID {pid}).",
     "status.scan_reset": "Sesión reiniciada. El proceso sigue adjunto.",
     "results.reinterpreted": "{address} como {type}: {value}",
-    "help.title": "Ayuda de MemPilot",
+    "help.title": "Ayuda de M@D-Engine",
     "help.body": (
         "Selecciona un proceso autorizado, elige tipo y condición, y usa F5 para el primer "
         "escaneo. Cambia el valor en el proceso y usa F6 para refinar. Ctrl+W añade el "

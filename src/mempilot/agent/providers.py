@@ -282,13 +282,13 @@ def _render_prompt(
     return (
         f"{instructions.strip()}\n\n"
         "REGLAS DEL ADAPTADOR CLI:\n"
-        "Eres únicamente el motor de decisión integrado en MemPilot. No uses herramientas "
+        "Eres únicamente el motor de decisión integrado en M@D-Engine. No uses herramientas "
         "internas de la CLI, no ejecutes comandos y no leas ni modifiques archivos. Las únicas "
         "acciones permitidas son las herramientas tipadas de available_tools. Para solicitar "
-        "acciones, devuelve tool_calls; MemPilot las validará, aplicará su política y devolverá "
+        "acciones, devuelve tool_calls; M@D-Engine las validará, aplicará su política y devolverá "
         "los resultados en el turno siguiente. Usa arguments_json con un objeto JSON codificado "
         "como texto. Devuelve texto final sólo cuando no necesites otra herramienta.\n\n"
-        f"ENTRADA_MEMPILOT={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
+        f"ENTRADA_MAD_MOD_ENGINE={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
     )
 
 
@@ -308,7 +308,7 @@ def _bounded_antigravity_prompt(
     notice = {
         "role": "system",
         "content": (
-            "MemPilot compactó contexto antiguo para respetar el límite de Antigravity. "
+            "M@D-Engine compactó contexto antiguo para respetar el límite de Antigravity. "
             "El estado de proceso más reciente es autoritativo."
         ),
     }

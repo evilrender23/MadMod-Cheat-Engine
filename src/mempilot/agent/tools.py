@@ -120,7 +120,7 @@ class ToolRegistry:
                 return self._serialize_error(
                     "unknown_tool",
                     "La herramienta solicitada no existe.",
-                    "Usa una de las herramientas publicadas por MemPilot.",
+                    "Usa una de las herramientas publicadas por M@D-Engine.",
                 )
             try:
                 arguments = tool.args_model.model_validate_json(arguments_json)
@@ -147,7 +147,7 @@ class ToolRegistry:
         except Exception:
             return self._serialize_error(
                 "internal_error",
-                "MemPilot no pudo completar la herramienta de forma segura.",
+                "M@D-Engine no pudo completar la herramienta de forma segura.",
                 "Revisa el estado de la aplicación y vuelve a intentarlo.",
             )
 
@@ -201,7 +201,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "attach_process",
-                "Adjunta MemPilot a un PID; úsala solo tras la selección explícita del usuario.",
+                "Adjunta M@D-Engine a un PID; úsala solo tras la selección explícita del usuario.",
                 AttachProcessArgs,
                 self._attach_process,
                 True,
@@ -709,7 +709,7 @@ def _workspace_path(name: str) -> Path:
     root = WORKSPACE_DIR.resolve()
     path = (root / f"{slug}.json").resolve()
     if not path.is_relative_to(root):
-        raise ValueError("El workspace debe permanecer en la carpeta segura de MemPilot.")
+        raise ValueError("El workspace debe permanecer en la carpeta segura de M@D-Engine.")
     return path
 
 

@@ -1,4 +1,4 @@
-"""Main MemPilot window and complete GUI-to-controller wiring."""
+"""Main M@D-Engine window and complete GUI-to-controller wiring."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from mempilot.agent.orchestrator import (
 )
 from mempilot.agent.policies import AgentMode
 from mempilot.agent.providers import create_cli_provider
+from mempilot.branding import APP_NAME, ORGANIZATION_NAME
 from mempilot.config.settings import Settings
 from mempilot.controller import Actor, AppController
 from mempilot.core.data_types import DataType, format_hex
@@ -64,7 +65,7 @@ class MainWindow(QMainWindow):
         self.settings = settings or Settings()
         self.settings_service = settings_service or SettingsService()
         self.orchestrator = orchestrator
-        self._layout_settings = QSettings("MemPilot", "MemPilot")
+        self._layout_settings = QSettings(ORGANIZATION_NAME, APP_NAME)
         self._write_confirmation_enabled = True
         self._last_write_access = False
         self.overlay = OverlayWindow()

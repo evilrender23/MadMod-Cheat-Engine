@@ -1,4 +1,4 @@
-"""PySide6 process used to demonstrate MemPilot memory operations."""
+"""PySide6 process used to demonstrate M@D-Engine memory operations."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt, QTime, QTimer, Slot
-from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtGui import QFont, QFontDatabase, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from mempilot.branding import APP_NAME, LOGO_FILENAME, PRODUCT_NAME, asset_path
 from mempilot.core.data_types import format_hex
 from mempilot.i18n import t
 
@@ -380,6 +381,10 @@ def run_lab(argv: list[str] | None = None) -> int:
         app = instance
     else:
         raise RuntimeError("Ya existe una aplicación Qt incompatible.")
+
+    app.setApplicationName(f"{APP_NAME} Memory Lab")
+    app.setApplicationDisplayName(f"{PRODUCT_NAME} Memory Lab")
+    app.setWindowIcon(QIcon(str(asset_path(LOGO_FILENAME))))
 
     window = MemoryLabWindow()
     _OPEN_WINDOWS.add(window)

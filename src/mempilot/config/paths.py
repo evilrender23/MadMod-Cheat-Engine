@@ -3,8 +3,14 @@
 import os
 from pathlib import Path
 
+from mempilot.branding import APP_DATA_DIRECTORY
+
 _APPDATA = os.environ.get("APPDATA")
-APP_DIR = Path(_APPDATA) / "MemPilot" if _APPDATA else Path.home() / ".mempilot"
+APP_DIR = (
+    Path(_APPDATA) / APP_DATA_DIRECTORY
+    if _APPDATA
+    else Path.home() / f".{APP_DATA_DIRECTORY.casefold()}"
+)
 LOG_DIR = APP_DIR / "logs"
 WORKSPACE_DIR = APP_DIR / "workspaces"
 TRAINER_DIR = APP_DIR / "trainers"
