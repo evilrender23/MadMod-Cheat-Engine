@@ -6,6 +6,7 @@ from typing import Any, cast
 import numpy as np
 
 from mempilot.core.exceptions import PatternError, ValueParseError
+from mempilot.i18n import t
 
 
 class DataType(StrEnum):
@@ -78,13 +79,13 @@ def numpy_dtype(dt: DataType) -> np.dtype[Any]:
     try:
         return np.dtype(_DTYPE_NAMES[dt])
     except KeyError as exc:
-        raise ValueError(f"{dt.value} no tiene tamaño fijo") from exc
+        raise ValueError(t("value.fixed_size", type=dt.value)) from exc
 
 
 def type_size(dt: DataType) -> int:
     """Return the encoded size of a fixed-width value."""
     if dt in VARIABLE_TYPES:
-        raise ValueError(f"{dt.value} no tiene tamaño fijo")
+        raise ValueError(t("value.fixed_size", type=dt.value))
     return int(numpy_dtype(dt).itemsize)
 
 
@@ -119,7 +120,7 @@ def parse_value(dt: DataType, text: str) -> int | float | bool | bytes:
             high = (1 << (bits - (1 if signed else 0))) - 1
             if not low <= parsed <= high:
                 raise ValueParseError(
-                    f"El valor {text!r} desborda el rango de {dt.value} ({low} a {high})."
+                    t("value.overflow", value=repr(text), type=dt.value, low=low, high=high)
                 )
             return parsed
         if dt in FLOAT_TYPES:
@@ -145,10 +146,8 @@ def parse_value(dt: DataType, text: str) -> int | float | bool | bytes:
     except (ValueError, OverflowError) as exc:
         if isinstance(exc, ValueParseError):
             raise
-        raise ValueParseError(
-            f"No se puede interpretar {text!r} como {dt.value}. Corrige el valor."
-        ) from exc
-    raise ValueParseError(f"Tipo de dato desconocido: {dt!r}.")
+        raise ValueParseError(t("value.invalid", value=repr(text), type=dt.value)) from exc
+    raise ValueParseError(t("value.unknown_type", type=repr(dt)))
 
 
 def encode_value(dt: DataType, text: str) -> bytes:
@@ -164,7 +163,7 @@ def decode_value(dt: DataType, raw: bytes) -> str:
     if dt in NUMERIC_TYPES:
         size = type_size(dt)
         if len(raw) < size:
-            raise ValueParseError(f"Se necesitan {size} bytes para decodificar {dt.value}.")
+            raise ValueParseError(t("value.decode_size", size=size, type=dt.value))
         value = np.frombuffer(raw[:size], dtype=numpy_dtype(dt), count=1)[0]
         if dt is DataType.BOOL:
             return "true" if bool(value) else "false"
@@ -189,17 +188,17 @@ def parse_aob(pattern: str) -> tuple[bytes, bytes]:
     """Parse an array-of-bytes pattern and its full-byte wildcard mask."""
     stripped = pattern.strip()
     if not stripped:
-        raise PatternError("El patrón AOB está vacío. Escribe al menos un byte hexadecimal.")
+        raise PatternError(t("aob.empty"))
     if any(char.isspace() for char in stripped):
         tokens = stripped.split()
     else:
         if "?" in stripped:
             if len(stripped) % 2:
-                raise PatternError("Los comodines AOB deben ocupar un byte completo: ? o ??.")
+                raise PatternError(t("aob.wildcard_size"))
             tokens = [stripped[index : index + 2] for index in range(0, len(stripped), 2)]
         else:
             if len(stripped) % 2:
-                raise PatternError("El patrón hexadecimal debe contener pares de dígitos.")
+                raise PatternError(t("aob.even_digits"))
             tokens = [stripped[index : index + 2] for index in range(0, len(stripped), 2)]
     values = bytearray()
     mask = bytearray()
@@ -209,11 +208,11 @@ def parse_aob(pattern: str) -> tuple[bytes, bytes]:
             mask.append(0)
             continue
         if len(token) != 2:
-            raise PatternError(f"Token AOB inválido: {token!r}. Usa pares hexadecimales.")
+            raise PatternError(t("aob.token_pair", token=repr(token)))
         try:
             values.append(int(token, 16))
         except ValueError as exc:
-            raise PatternError(f"Token AOB inválido: {token!r}. Usa 00-FF o ??.") from exc
+            raise PatternError(t("aob.token_hex", token=repr(token))) from exc
         mask.append(0xFF)
     return bytes(values), bytes(mask)
 
@@ -221,5 +220,5 @@ def parse_aob(pattern: str) -> tuple[bytes, bytes]:
 def format_hex(address: int) -> str:
     """Format an address as a 16-digit uppercase hexadecimal value."""
     if address < 0:
-        raise ValueError("Una dirección no puede ser negativa")
+        raise ValueError(t("address.negative"))
     return f"0x{address:016X}"

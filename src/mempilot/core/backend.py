@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Self
 
 from mempilot.core.exceptions import MemoryReadError, NotAttachedError
+from mempilot.i18n import t
 
 
 class Architecture(StrEnum):
@@ -90,12 +91,12 @@ class MemoryRegion:
         return f"{text}+G" if self.protect & _PAGE_GUARD else text
 
     def type_text(self) -> str:
-        """Return the Spanish region category."""
+        """Return the localized region category."""
         return {
-            _MEM_PRIVATE: "Privada",
-            _MEM_IMAGE: "Imagen",
-            _MEM_MAPPED: "Mapeada",
-        }.get(self.type, "Desconocida")
+            _MEM_PRIVATE: t("region.private"),
+            _MEM_IMAGE: t("region.image"),
+            _MEM_MAPPED: t("region.mapped"),
+        }.get(self.type, t("region.unknown"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,13 +151,11 @@ class MemoryBackend(ABC):
     def read(self, address: int, size: int) -> bytes:
         """Read an exact UI-sized memory span or raise on total failure."""
         if size < 0:
-            raise ValueError("El tamaño de lectura no puede ser negativo")
+            raise ValueError(t("memory.read_size_negative"))
         target = bytearray(size)
         count = self.read_into(address, memoryview(target))
         if size and count == 0:
-            raise MemoryReadError(
-                f"No se pudo leer la dirección 0x{address:016X}. Comprueba que siga asignada."
-            )
+            raise MemoryReadError(t("memory.read_address", address=f"0x{address:016X}"))
         return bytes(target[:count])
 
     @abstractmethod

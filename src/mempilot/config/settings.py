@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from mempilot.i18n import Language
+
 
 class ScanSettings(BaseModel):
     """Persistent defaults mirroring scan options."""
@@ -34,6 +36,7 @@ class UISettings(BaseModel):
     results_refresh_ms: int = Field(default=500, ge=50, le=5000)
     watch_refresh_ms: int = Field(default=100, ge=50, le=5000)
     show_system_processes: bool = False
+    language: Language = Language.SPANISH
 
 
 class CLIBackend(StrEnum):

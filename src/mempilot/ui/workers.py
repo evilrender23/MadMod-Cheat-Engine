@@ -22,6 +22,7 @@ from mempilot.core.scanner import (
     UnknownSnapshot,
 )
 from mempilot.core.watcher import WatchEntry, WatchTable, resolve_watch_address
+from mempilot.i18n import t
 
 if TYPE_CHECKING:
     from mempilot.core.process_service import ProcessService
@@ -202,7 +203,7 @@ class AgentWorker(_BaseWorker):
     ) -> None:
         super().__init__()
         if tool_timeout_s <= 0:
-            raise ValueError("El tiempo de espera de herramientas debe ser positivo.")
+            raise ValueError(t("worker.timeout_positive"))
         self._job = job
         self.cancel_event = cancel or threading.Event()
         self._tool_timeout_s = tool_timeout_s
@@ -240,12 +241,12 @@ class AgentWorker(_BaseWorker):
         while not invocation.done.wait(0.05):
             if self.cancel_event.is_set():
                 return json.dumps(
-                    {"ok": False, "error": "Operación del agente cancelada."},
+                    {"ok": False, "error": t("agent.operation_cancelled")},
                     ensure_ascii=False,
                 )
             if time.monotonic() >= deadline:
                 return json.dumps(
-                    {"ok": False, "error": "La herramienta agotó el tiempo de espera."},
+                    {"ok": False, "error": t("agent.tool_timeout")},
                     ensure_ascii=False,
                 )
         return invocation.result_json
@@ -303,7 +304,7 @@ class WatchScheduler(_BaseWorker):
         self._default_interval_ms = self._bounded_interval(default_interval_ms)
         self._results_refresh_ms = self._bounded_interval(results_refresh_ms)
         if results_page_size < 1:
-            raise ValueError("El tamaño de página de resultados debe ser positivo.")
+            raise ValueError(t("results.page_size_positive"))
         self._results_page_size = results_page_size
         self._timer: QTimer | None = None
         self._modules: list[ModuleInfo] = []
@@ -342,7 +343,7 @@ class WatchScheduler(_BaseWorker):
     def set_visible_rows(self, visible: object) -> None:
         """Replace the bounded page refreshed on subsequent ticks."""
         if not isinstance(visible, VisibleResultRows):
-            raise TypeError("Se esperaba una página visible de resultados.")
+            raise TypeError(t("results.visible_expected"))
         self._visible = VisibleResultRows(
             visible.session_id,
             visible.rows[: self._results_page_size],
@@ -389,7 +390,7 @@ class WatchScheduler(_BaseWorker):
             self._last_watch[entry.id] = now
             address, error = resolve_watch_address(entry, self._backend, self._modules)
             if address is None:
-                watch_errors[entry.id] = error or "No se pudo resolver la dirección."
+                watch_errors[entry.id] = error or t("watch.resolve_failed")
                 continue
             size = self._watch_size(entry)
             resolved[entry.id] = (entry, address)
@@ -405,7 +406,7 @@ class WatchScheduler(_BaseWorker):
             pair = resolved.get(entry.id)
             raw = raw_by_key.get(("watch", entry.id))
             if pair is None or raw is None:
-                error = watch_errors.get(entry.id, "No se pudo leer la dirección vigilada.")
+                error = watch_errors.get(entry.id, t("watch.read_failed"))
                 self._watches.update_runtime(entry.id, entry.current_value, error)
                 continue
             _stored_entry, address = pair
@@ -425,10 +426,7 @@ class WatchScheduler(_BaseWorker):
             current = values.get(watch_id, "")
             self._watches.update_runtime(watch_id, current, error)
         if freeze_result.limit_reached:
-            self.write_error.emit(
-                "Se alcanzó el límite de 32 escrituras de congelado por ciclo. "
-                "Reduce las vigilancias congeladas o aumenta sus intervalos."
-            )
+            self.write_error.emit(t("watch.freeze_tick_limit"))
         elif freeze_result.errors:
             self.write_error.emit(next(iter(freeze_result.errors.values())))
         if values:
@@ -529,7 +527,7 @@ class WatchScheduler(_BaseWorker):
 def start_worker(worker: _BaseWorker, on_finished: Callable[[], None]) -> QThread:
     """Start a parentless worker with the sole approved QObject/QThread lifecycle."""
     if worker.parent() is not None:
-        raise ValueError("Un worker debe crearse sin padre antes de moverlo a un QThread.")
+        raise ValueError(t("worker.parentless_required"))
     thread = QThread()
     worker.moveToThread(thread)
     thread.started.connect(

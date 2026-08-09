@@ -11,6 +11,7 @@ from mempilot.core.backend import MemoryBackend, ModuleInfo
 from mempilot.core.data_types import DataType
 from mempilot.core.exceptions import InvalidAddressError, WorkspaceError
 from mempilot.core.pointer_chain import PointerChain, resolve_chain
+from mempilot.i18n import t
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,18 +36,15 @@ class WatchSpec:
             )
         )
         if modes != 1:
-            raise InvalidAddressError(
-                "La vigilancia debe usar una dirección absoluta, "
-                "módulo+offset o cadena de punteros."
-            )
+            raise InvalidAddressError(t("watch.address_mode_invalid"))
         if self.address is not None and self.address < 0:
-            raise InvalidAddressError("La dirección de vigilancia no puede ser negativa.")
+            raise InvalidAddressError(t("watch.address_negative"))
         if (self.module is None) != (self.offset is None):
-            raise InvalidAddressError("El módulo y el offset deben indicarse juntos.")
+            raise InvalidAddressError(t("watch.module_offset_pair"))
         if self.module is not None and not self.module.strip():
-            raise InvalidAddressError("El nombre del módulo no puede estar vacío.")
+            raise InvalidAddressError(t("watch.module_name_required"))
         if not 50 <= self.interval_ms <= 5000:
-            raise ValueError("El intervalo de vigilancia debe estar entre 50 y 5000 ms.")
+            raise ValueError(t("watch.interval_range"))
 
 
 @dataclass(slots=True)
@@ -109,7 +107,7 @@ class WatchTable:
         entry = WatchEntry.from_spec(spec, watch_id=watch_id)
         with self._lock:
             if entry.id in self._entries:
-                raise ValueError(f"Ya existe una vigilancia con id {entry.id}.")
+                raise ValueError(t("watch.duplicate", watch_id=entry.id))
             self._entries[entry.id] = entry
         self._emit_changed()
         return replace(entry)
@@ -120,7 +118,7 @@ class WatchTable:
             try:
                 entry = self._entries.pop(watch_id)
             except KeyError:
-                raise KeyError(f"No existe la vigilancia {watch_id}.") from None
+                raise KeyError(t("watch.missing", watch_id=watch_id)) from None
         self._emit_changed()
         return replace(entry)
 
@@ -130,7 +128,7 @@ class WatchTable:
             try:
                 return replace(self._entries[watch_id])
             except KeyError:
-                raise KeyError(f"No existe la vigilancia {watch_id}.") from None
+                raise KeyError(t("watch.missing", watch_id=watch_id)) from None
 
     def entries(self) -> list[WatchEntry]:
         """Return stable snapshots in insertion order."""
@@ -148,9 +146,9 @@ class WatchTable:
     ) -> WatchEntry:
         """Update user-editable metadata and return a detached snapshot."""
         if interval_ms is not None and not 50 <= interval_ms <= 5000:
-            raise ValueError("El intervalo de vigilancia debe estar entre 50 y 5000 ms.")
+            raise ValueError(t("watch.interval_range"))
         if label is not None and not label.strip():
-            raise ValueError("El nombre de la vigilancia no puede estar vacío.")
+            raise ValueError(t("watch.name_required"))
         with self._lock:
             entry = self._entry(watch_id)
             if label is not None:
@@ -186,12 +184,12 @@ class WatchTable:
     ) -> WatchEntry:
         """Update freeze state after the controller has validated the value."""
         if not 50 <= interval_ms <= 5000:
-            raise ValueError("El intervalo de congelado debe estar entre 50 y 5000 ms.")
+            raise ValueError(t("watch.interval_range"))
         with self._lock:
             entry = self._entry(watch_id)
             next_desired = desired_value if desired_value is not None else entry.desired_value
             if frozen and next_desired is None:
-                raise ValueError("Indica un valor deseado antes de congelar la vigilancia.")
+                raise ValueError(t("watch.freeze_value_required"))
             entry.frozen = frozen
             entry.interval_ms = interval_ms
             entry.desired_value = next_desired
@@ -212,7 +210,7 @@ class WatchTable:
         """Atomically replace the collection, rejecting duplicate identifiers."""
         replacement = {entry.id: replace(entry) for entry in entries}
         if len(replacement) != len(entries):
-            raise WorkspaceError("El workspace contiene identificadores de vigilancia duplicados.")
+            raise WorkspaceError(t("workspace.duplicate_watches"))
         with self._lock:
             self._entries = replacement
         self._emit_changed()
@@ -256,13 +254,13 @@ class WatchTable:
         entries: list[WatchEntry] = []
         for raw_model in models:
             if not isinstance(raw_model, WatchEntryModel):
-                raise TypeError("Se esperaba un modelo de vigilancia de workspace.")
+                raise TypeError(t("workspace.watch_model_expected"))
             model = raw_model
             chain = None
             if model.address_mode == "pointer_chain":
                 if model.chain_id is None or model.chain_id not in chains:
                     raise WorkspaceError(
-                        f"La vigilancia {model.label!r} referencia una cadena de punteros ausente."
+                        t("workspace.pointer_chain_missing", label=repr(model.label))
                     )
                 chain = chains[model.chain_id]
             spec = WatchSpec(
@@ -287,7 +285,7 @@ class WatchTable:
         try:
             return self._entries[watch_id]
         except KeyError:
-            raise KeyError(f"No existe la vigilancia {watch_id}.") from None
+            raise KeyError(t("watch.missing", watch_id=watch_id)) from None
 
     def _emit_changed(self) -> None:
         if self._on_changed is not None:
@@ -312,12 +310,12 @@ def resolve_watch_address(
             None,
         )
         if module is None:
-            return None, f"El módulo {entry.module!r} no está cargado."
+            return None, t("watch.module_not_loaded", module=repr(entry.module))
         address = module.base + entry.offset
         if address < 0:
-            return None, "El offset produce una dirección negativa."
+            return None, t("watch.offset_negative")
         return address, None
     if entry.chain is not None:
         resolution = resolve_chain(entry.chain, backend, modules)
         return resolution.final_address, resolution.error
-    return None, "La vigilancia no tiene un modo de dirección válido."
+    return None, t("watch.address_mode_invalid")

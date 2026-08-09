@@ -1,4 +1,8 @@
-"""Central Spanish user-interface strings."""
+"""Runtime-selectable Spanish and English user-interface strings."""
+
+from enum import StrEnum
+
+from mempilot.i18n_en import ENGLISH_STRINGS
 
 STRINGS: dict[str, str] = {
     "app.name": "M@D-Engine",
@@ -293,6 +297,12 @@ STRINGS: dict[str, str] = {
     "settings.write_limit": "Límite de escrituras autónomas",
     "settings.save": "Guardar ajustes",
     "settings.saved": "Los ajustes se guardaron.",
+    "settings.language": "Idioma",
+    "settings.language.es": "Español",
+    "settings.language.en": "Inglés",
+    "settings.language_restart": (
+        "Idioma guardado. Reinicia M@D-Engine para aplicarlo a toda la interfaz."
+    ),
     "confirm.title": "Confirmar escritura",
     "confirm.action": "Acción",
     "confirm.address": "Dirección",
@@ -304,14 +314,438 @@ STRINGS: dict[str, str] = {
     "confirm.manual_write": "Escribir memoria manualmente",
     "error.technical": "Causa técnica",
     "error.unknown": "Se produjo un error inesperado. Inténtalo de nuevo.",
+    "error.process_not_found": (
+        "El proceso ya no existe. Actualiza la lista y selecciona otro proceso."
+    ),
+    "error.process_not_allowed": (
+        "Ese proceso está protegido. Selecciona un proceso de usuario autorizado."
+    ),
+    "error.access_denied": (
+        "Acceso denegado. Usa un proceso de tu nivel de integridad o ejecuta como administrador."
+    ),
+    "error.process_exited": "El proceso terminó. Vuelve a seleccionarlo si lo inicias de nuevo.",
+    "error.not_attached": (
+        "No hay ningún proceso adjunto. Selecciona un proceso antes de continuar."
+    ),
+    "error.write_not_permitted": (
+        "La sesión es de solo lectura. Vuelve a adjuntarte con permiso de escritura."
+    ),
+    "error.memory_read": (
+        "No se pudo leer la memoria. Comprueba que el proceso siga activo "
+        "y la dirección sea válida."
+    ),
+    "error.memory_write": (
+        "No se pudo escribir la memoria. Comprueba el permiso y la protección de la región."
+    ),
+    "error.invalid_address": (
+        "La dirección no pertenece a una región válida. Actualiza los resultados "
+        "e inténtalo de nuevo."
+    ),
+    "error.value_parse": "El valor no tiene el formato esperado para el tipo seleccionado.",
+    "error.pattern": "El patrón AOB no es válido. Usa bytes hexadecimales y ?? para comodines.",
+    "error.scan": "El escaneo no pudo completarse. Reduce el rango o usa un valor más específico.",
+    "error.scan_cancelled": "El escaneo fue cancelado. Puedes iniciar uno nuevo.",
+    "error.workspace": "El workspace no es válido. Comprueba el archivo o crea uno nuevo.",
+    "error.trainer": "El trainer no es válido. Comprueba el proceso y los trucos guardados.",
+    "error.policy_denied": (
+        "La política de seguridad impide esta operación. Revisa el modo y los permisos del agente."
+    ),
+    "error.provider": (
+        "El proveedor de IA no respondió correctamente. Revisa la conexión y la configuración."
+    ),
+    "scan.validation.alignment_negative": (
+        "La alineación no puede ser negativa. Usa Automática o 1 byte."
+    ),
+    "scan.validation.chunk_positive": "El tamaño de bloque debe ser mayor que cero.",
+    "scan.validation.candidates_positive": ("El límite de candidatos debe ser mayor que cero."),
+    "scan.validation.budget_nonnegative": "El presupuesto de memoria no puede ser negativo.",
+    "scan.validation.range": "El rango de direcciones no es válido. Corrige sus límites.",
+    "scan.validation.bytes": "Bytes es un formato de visualización y no se puede escanear.",
+    "scan.validation.aob_type": "La condición AOB requiere el tipo de dato AOB.",
+    "scan.validation.aob_mode": "El tipo AOB solo admite la condición AOB.",
+    "scan.validation.text_type": ("La condición Texto requiere un tipo de texto UTF-8 o UTF-16."),
+    "scan.validation.text_mode": "Los tipos de texto solo admiten la condición Texto.",
+    "scan.validation.numeric_type": "Esta condición requiere un tipo numérico.",
+    "scan.validation.valueless": "Esta condición no admite un valor de búsqueda.",
+    "scan.validation.value2_only": "Valor 2 solo se usa con la condición Entre.",
+    "scan.validation.between_order": ("El límite inferior de Entre no puede superar al superior."),
+    "value.fixed_size": "{type} no tiene tamaño fijo.",
+    "value.overflow": "El valor {value} desborda el rango de {type} ({low} a {high}).",
+    "value.invalid": "No se puede interpretar {value} como {type}. Corrige el valor.",
+    "value.unknown_type": "Tipo de dato desconocido: {type}.",
+    "value.decode_size": "Se necesitan {size} bytes para decodificar {type}.",
+    "aob.empty": "El patrón AOB está vacío. Escribe al menos un byte hexadecimal.",
+    "aob.wildcard_size": "Los comodines AOB deben ocupar un byte completo: ? o ??.",
+    "aob.even_digits": "El patrón hexadecimal debe contener pares de dígitos.",
+    "aob.token_pair": "Token AOB inválido: {token}. Usa pares hexadecimales.",
+    "aob.token_hex": "Token AOB inválido: {token}. Usa 00-FF o ??.",
+    "address.negative": "Una dirección no puede ser negativa.",
     "workspace.save_title": "Guardar workspace",
     "workspace.load_title": "Cargar workspace",
+    "agent.operation_cancelled": "Operación del agente cancelada.",
+    "agent.tool_timeout": "La herramienta agotó el tiempo de espera.",
+    "results.page_size_positive": "El tamaño de página de resultados debe ser positivo.",
+    "results.visible_expected": "Se esperaba una página visible de resultados.",
+    "watch.resolve_failed": "No se pudo resolver la dirección.",
+    "watch.read_failed": "No se pudo leer la dirección vigilada.",
+    "watch.freeze_tick_limit": (
+        "Se alcanzó el límite de 32 escrituras de congelado por ciclo. "
+        "Reduce las vigilancias congeladas o aumenta sus intervalos."
+    ),
+    "error.agent_bound_process": (
+        "El agente está vinculado a otro proceso. Pide al usuario que seleccione el proceso."
+    ),
+    "status.process_changed": "Se cambió el proceso adjunto.",
+    "error.process_changed_during_attach": (
+        "El proceso cambió mientras se abría. Actualiza la lista y vuelve a intentarlo."
+    ),
+    "error.scan_session_process": "La sesión pertenece a otro proceso. Inicia un nuevo escaneo.",
+    "error.refine_type": "El tipo del refinamiento debe coincidir con el escaneo inicial.",
+    "error.reset_while_scanning": "Cancela el escaneo en curso antes de reiniciar la sesión.",
+    "error.partial_write": (
+        "Solo se escribieron {written} de {expected} bytes. Actualiza la dirección."
+    ),
+    "error.watch_partial_write": "La escritura de la vigilancia quedó incompleta.",
+    "error.trainer_resolve": "No se pudo resolver la dirección del truco.",
+    "error.lab_exited": "Memory Lab terminó antes de mostrar su ventana.",
+    "error.lab_window_timeout": "Memory Lab no mostró una ventana dentro de 10 segundos.",
+    "error.agent_busy": "Ya hay una operación del agente en curso.",
+    "status.process_detached_on_exit": "El proceso terminó y M@D-Engine se desacopló.",
+    "error.pid_exited": "El proceso PID {pid} terminó. Selecciona otro proceso para continuar.",
+    "error.scan_busy": "Ya hay un escaneo en curso. Cancélalo antes de iniciar otro.",
+    "error.refine_incompatible": "El refinamiento devolvió un resultado incompatible.",
+    "watch.address_mode_invalid": (
+        "La vigilancia debe usar una dirección absoluta, módulo+offset o cadena de punteros."
+    ),
+    "watch.address_negative": "La dirección de vigilancia no puede ser negativa.",
+    "watch.module_offset_pair": "El módulo y el offset deben indicarse juntos.",
+    "watch.module_name_required": "El nombre del módulo no puede estar vacío.",
+    "watch.interval_range": "El intervalo de vigilancia debe estar entre 50 y 5000 ms.",
+    "watch.name_required": "El nombre de la vigilancia no puede estar vacío.",
+    "watch.module_not_loaded": "El módulo {module} no está cargado.",
+    "watch.offset_negative": "El offset produce una dirección negativa.",
+    "pointer.module_not_loaded": "módulo {module} no cargado",
+    "process.pid_protected": (
+        "El PID {pid} está protegido. Selecciona un proceso de usuario autorizado."
+    ),
+    "process.name_protected": (
+        "El proceso {name} (PID {pid}) está protegido. Selecciona un proceso de usuario autorizado."
+    ),
+    "process.pid_finished": "El PID {pid} terminó durante la consulta. Actualiza la lista.",
+    "memory.read_size_negative": "El tamaño de lectura no puede ser negativo.",
+    "memory.read_address": ("No se pudo leer la dirección {address}. Comprueba que siga asignada."),
+    "memory.buffer_writable": "El búfer de lectura debe ser modificable.",
+    "memory.region_not_writable": (
+        "La dirección {address} no pertenece a una región asignada y escribible. "
+        "Actualiza los resultados e inténtalo de nuevo."
+    ),
+    "memory.write_address": (
+        "No se pudo escribir la dirección {address}. "
+        "Comprueba la protección de la región y vuelve a intentarlo."
+    ),
+    "pointer.read_failed_at": "lectura fallida en {address}",
+    "pointer.read_failed": "lectura fallida",
+    "pointer.partial_read": "lectura parcial",
+    "pointer.null": "puntero nulo",
+    "pointer.null_at_step": "puntero nulo en el paso {step}",
+    "pointer.resolved": "resuelto",
+    "process.pid_missing": (
+        "El PID {pid} ya no existe. Actualiza la lista y selecciona otro proceso."
+    ),
+    "process.pid_uncheckable": (
+        "No se puede comprobar el PID {pid}. Selecciona un proceso de usuario autorizado."
+    ),
+    "policy.ai_off": "La IA está desactivada. Actívala en Ajustes → IA.",
+    "policy.autonomous_process": "El modo autónomo no puede cambiar de proceso.",
+    "policy.select_process": "Pide al usuario que seleccione un proceso.",
+    "policy.identity_changed": (
+        "El proceso ya no coincide con la autorización. Se desactivó el modo autónomo; "
+        "pide al usuario que lo autorice de nuevo."
+    ),
+    "policy.confirm_trainer": "El usuario debe confirmar que el truco funciona.",
+    "policy.confirm_action": "Esta acción requiere confirmación del usuario.",
+    "policy.write_limit": (
+        "Límite de {limit} escrituras alcanzado; el usuario debe ampliarlo en Ajustes."
+    ),
+    "policy.autonomous_allowed": "Acción autorizada dentro del límite de escrituras.",
+    "policy.state_denied": (
+        "La herramienta no está disponible en el paso {state}. "
+        "Completa antes el paso adecuado: {expected}."
+    ),
+    "policy.read_allowed": "Acción de solo lectura autorizada.",
+    "policy.follow_hint": "Sigue el paso indicado por la política.",
+    "confirmation.rejected_error": "El usuario rechazó la confirmación.",
+    "confirmation.rejected_hint": ("No repitas la escritura sin una nueva indicación del usuario."),
+    "confirmation.timeout_error": "Confirmación expirada.",
+    "confirmation.timeout_hint": "Pregunta al usuario si desea volver a intentarlo.",
+    "confirmation.unknown": "desconocido",
+    "confirmation.watch_detail": "{action}: {label}\nValor actual: {current}\nValor nuevo: {value}",
+    "confirmation.trainer_detail": (
+        "¿Confirmas que el truco funciona y quieres guardarlo?\n"
+        "Proceso: {process}\nTruco: {name}\nActivado: {enabled}\nDesactivado: {disabled}"
+    ),
+    "confirmation.unfreeze": "descongelar",
+    "confirmation.attach_detail": (
+        "Adjuntar al PID {pid} con permiso de escritura: {write_access}"
+    ),
+    "confirmation.workspace_detail": "Cargar workspace: {name}",
+    "agent.request_failed": (
+        "El agente no pudo completar la solicitud. Revisa el estado e inténtalo de nuevo."
+    ),
+    "provider.executable_required": "La ruta del ejecutable CLI no puede estar vacía.",
+    "provider.invalid_json_args": (
+        "{provider} devolvió argumentos JSON inválidos para {tool}. Inténtalo de nuevo."
+    ),
+    "provider.unstructured_args": (
+        "{provider} devolvió argumentos no estructurados para {tool}. Inténtalo de nuevo."
+    ),
+    "provider.timeout": (
+        "{provider} no respondió en {seconds} s. Aumenta el tiempo de espera en Ajustes → IA."
+    ),
+    "provider.start_failed": "No se pudo iniciar {provider}. Comprueba la ruta en Ajustes → IA.",
+    "provider.exit_code": "{provider} terminó con el código {code}. {hint}",
+    "provider.empty_response": (
+        "{provider} no produjo una respuesta. Comprueba que la sesión esté iniciada "
+        "y que el modelo seleccionado admita salida estructurada."
+    ),
+    "provider.request_too_large": (
+        "La petición actual es demasiado grande para Antigravity CLI. "
+        "Usa un mensaje más breve o solicita menos resultados."
+    ),
+    "provider.incompatible_response": (
+        "{provider} devolvió una respuesta incompatible. "
+        "Comprueba el modelo seleccionado e inténtalo de nuevo."
+    ),
+    "provider.login_hint": "Inicia sesión directamente con «{provider}» y vuelve a intentarlo.",
+    "provider.failure_hint": (
+        "Comprueba la instalación, la sesión iniciada y el modelo en Ajustes → IA."
+    ),
+    "freezer.limit_positive": "El límite de escrituras por ciclo debe ser positivo.",
+    "results.offset_limit_nonnegative": ("El desplazamiento y el límite no pueden ser negativos."),
+    "scan.delta_required": "Esta comparación requiere un delta.",
+    "scan.comparison_unsupported": "Modo de comparación no compatible: {mode}.",
+    "scan.pattern_mask_length": ("El patrón y la máscara deben tener la misma longitud no nula."),
+    "scan.first_numeric_invalid": ("Esta condición no es válida para un primer escaneo numérico."),
+    "scan.refine_invalid": "La condición no es válida para este refinamiento.",
+    "scan.variable_invalid": "La condición no es válida para datos de longitud variable.",
+    "scan.unknown_refine_numeric": (
+        "Un escaneo de valor desconocido debe refinarse con una comparación numérica."
+    ),
+    "audit.write_count_nonnegative": "El número de escrituras no puede ser negativo.",
+    "trainer.name_required": "El nombre del truco no puede estar vacío.",
+    "trainer.address_ambiguous": (
+        "La dirección persistida del truco es ambigua o está incompleta."
+    ),
+    "trainer.disabled_required": (
+        "Un truco de escritura reversible necesita un valor desactivado."
+    ),
+    "trainer.saved_invalid": ("El trainer guardado no es válido o usa una versión incompatible."),
+    "trainer.wrong_process": "El trainer guardado pertenece a otro proceso.",
+    "trainer.trick_invalid": (
+        "El truco no es válido. Revisa el nombre, la dirección y los valores."
+    ),
+    "trainer.values_invalid": (
+        "Los valores del truco no son válidos. Revisa el valor activado y desactivado."
+    ),
+    "workspace.version_invalid": (
+        "El workspace no es válido o usa una versión incompatible. "
+        "Selecciona un archivo de esquema 1 o crea uno nuevo."
+    ),
+    "trainer.architecture_mismatch": (
+        "La arquitectura del trainer no coincide con el proceso adjunto."
+    ),
+    "trainer.missing": "No existe el truco guardado {trick_id}.",
+    "trainer.save_failed": (
+        "No se pudo guardar el trainer en {path}. Comprueba la carpeta y los permisos."
+    ),
+    "workspace.save_failed": (
+        "No se pudo guardar el workspace en {path}. Comprueba la carpeta y los permisos."
+    ),
+    "chat.message_required": "El mensaje no puede estar vacío.",
+    "agent.empty_turn": "El proveedor no devolvió texto ni herramientas. Inténtalo de nuevo.",
+    "agent.step_limit": (
+        "El agente superó el límite de pasos consecutivos. "
+        "Reformula la petición y continúa desde el estado actual."
+    ),
+    "tool.fix_cause": "Corrige la causa indicada y vuelve a intentar la operación.",
+    "tool.invalid_operation": "La operación solicitada no es válida.",
+    "tool.review_state": "Revisa los datos y el estado actual antes de volver a intentarlo.",
+    "tool.safe_failure": "M@D-Engine no pudo completar la herramienta de forma segura.",
+    "tool.safe_hint": "Revisa el estado de la aplicación y vuelve a intentarlo.",
+    "tool.response_large": "La respuesta supera el límite seguro de tamaño.",
+    "tool.response_filter": "Usa un filtro más específico o solicita una página más pequeña.",
+    "tool.description.list_processes": (
+        "Lista procesos locales autorizados; úsala antes de proponer cuál seleccionar."
+    ),
+    "tool.description.attach_process": (
+        "Adjunta M@D-Engine a un PID; úsala solo tras la selección explícita del usuario."
+    ),
+    "tool.description.detach_process": (
+        "Desacopla el proceso actual; úsala cuando el usuario quiera terminar la sesión."
+    ),
+    "tool.description.get_attached_process": (
+        "Consulta el proceso vinculado; úsala para confirmar identidad y arquitectura."
+    ),
+    "tool.description.start_scan": (
+        "Inicia un primer escaneo tipado; úsala después de conocer el valor inicial."
+    ),
+    "tool.description.refine_scan": (
+        "Refina los candidatos actuales; úsala después de que el usuario provoque un cambio."
+    ),
+    "tool.description.cancel_scan": (
+        "Cancela el escaneo en curso; úsala cuando el usuario lo solicite."
+    ),
+    "tool.description.get_scan_status": (
+        "Consulta estado y candidatos; úsala antes de decidir el siguiente paso."
+    ),
+    "tool.description.list_scan_results": (
+        "Devuelve una página acotada de candidatos; úsala para inspeccionar pocos resultados."
+    ),
+    "tool.description.read_address": (
+        "Lee una dirección conocida con un tipo concreto; nunca inventes la dirección."
+    ),
+    "tool.description.add_watch": (
+        "Añade una dirección candidata a vigilancia; úsala cuando queden pocos candidatos."
+    ),
+    "tool.description.list_watches": (
+        "Lista las vigilancias actuales; úsala antes de escribir, congelar o eliminar."
+    ),
+    "tool.description.list_trainer_tricks": (
+        "Lista los trucos guardados para el proceso adjunto y su estado actual."
+    ),
+    "tool.description.save_trainer_trick": (
+        "Guarda como trainer una vigilancia ya probada. Llámala únicamente después "
+        "de que el usuario diga que el truco funciona; siempre exige confirmación."
+    ),
+    "tool.description.write_watch": (
+        "Escribe un valor en una vigilancia existente; requiere autorización de escritura."
+    ),
+    "tool.description.freeze_watch": (
+        "Congela una vigilancia en un valor; requiere autorización y tiene escritura periódica."
+    ),
+    "tool.description.unfreeze_watch": (
+        "Descongela una vigilancia; úsala para detener sus escrituras periódicas."
+    ),
+    "tool.description.remove_watch": (
+        "Elimina una vigilancia; úsala solo para una entrada identificada por su id."
+    ),
+    "tool.description.save_workspace": (
+        "Guarda la sesión en la carpeta segura de workspaces usando solo un nombre."
+    ),
+    "tool.description.load_workspace": (
+        "Carga una sesión desde la carpeta segura de workspaces usando solo un nombre."
+    ),
+    "tool.unknown": "La herramienta solicitada no existe.",
+    "tool.use_published": "Usa una de las herramientas publicadas por M@D-Engine.",
+    "tool.invalid_arguments": "Los argumentos no tienen el formato requerido.",
+    "tool.fix_schema": (
+        "Corrige los campos indicados por el esquema estricto y vuelve a intentarlo."
+    ),
+    "provider.script_exhausted": (
+        "El proveedor de prueba agotó los turnos programados. Añade otro ProviderTurn al guion."
+    ),
+    "scan.stats.candidates": "Candidatos",
+    "scan.stats.regions": "Regiones analizadas",
+    "scan.stats.bytes": "Bytes analizados",
+    "scan.stats.duration": "Duración del último escaneo",
+    "scan.stats.refinements": "Refinamientos",
+    "scan.stats.type": "Tipo",
+    "scan.stats.last_condition": "Última condición",
+    "error.no_scan_ready": (
+        "No hay un escaneo listo para refinar. Ejecuta primero un escaneo inicial."
+    ),
+    "watch.freeze_value_required": "Indica un valor deseado antes de congelar la vigilancia.",
+    "trainer.current_value_mismatch": (
+        "El valor actual ya no coincide con el valor activado. "
+        "Prueba de nuevo el truco antes de guardarlo."
+    ),
+    "trainer.deactivate_before_edit": "Desactiva el truco antes de editar sus valores.",
+    "trainer.disabled_value_missing": "El truco no tiene un valor para desactivarlo.",
+    "workspace.wrong_process": (
+        "El workspace pertenece a {workspace_process}; el proceso adjunto es {attached_process}."
+    ),
+    "workspace.architecture_mismatch": (
+        "La arquitectura del workspace no coincide con el proceso adjunto."
+    ),
+    "error.agent_identity_mismatch": (
+        "El proceso adjunto no coincide con la identidad autorizada para el agente. "
+        "Pide al usuario que vuelva a seleccionarlo."
+    ),
+    "schema.unsupported": "El esquema usa palabras clave no admitidas: {keywords}",
+    "tool.watch_missing": (
+        "La vigilancia indicada no existe. Actualiza la lista y elige un id válido."
+    ),
+    "tool.workspace_name_required": "El nombre del workspace no puede estar vacío.",
+    "tool.workspace_name_alnum": "El nombre del workspace debe contener letras o números.",
+    "tool.workspace_confined": ("El workspace debe permanecer en la carpeta segura de M@D-Engine."),
+    "tool.timeout_range": "El tiempo de espera debe estar entre 1 y 120000 ms.",
+    "tool.no_initial_scan_type": "No hay un escaneo inicial cuyo tipo se pueda refinar.",
+    "tool.no_attached_process": "No hay ningún proceso adjunto.",
+    "watch.write_ok": "Valor escrito en la vigilancia.",
+    "tool.workspace_name_only": "Indica solo un nombre de workspace, no una ruta.",
+    "tool.process_detached": "Proceso desacoplado.",
+    "tool.scan_cancel_requested": "Cancelación solicitada.",
+    "tool.watch_frozen": "Vigilancia congelada.",
+    "tool.watch_unfrozen": "Vigilancia descongelada.",
+    "tool.watch_removed": "Vigilancia eliminada.",
+    "tool.workspace_saved": "Workspace guardado.",
+    "tool.workspace_loaded": "Workspace cargado.",
+    "tool.agent_detach_reason": "Desacoplado por el agente con autorización del usuario.",
+    "error.logo_load": "No se pudo cargar el logo de Mad Mod Engine.",
+    "worker.timeout_positive": "El tiempo de espera de herramientas debe ser positivo.",
+    "worker.parentless_required": (
+        "Un worker debe crearse sin padre antes de moverlo a un QThread."
+    ),
+    "error.qt_application_incompatible": "Ya existe una aplicación Qt incompatible.",
+    "scan.vector_shape_mismatch": "Los vectores actual y anterior deben tener la misma forma.",
+    "scan.previous_required": "Este modo necesita un escaneo anterior para poder comparar.",
+    "scan.unknown_initial_only": (
+        "Valor desconocido inicial solo puede usarse en el primer escaneo."
+    ),
+    "scan.previous_type_mismatch": ("El tipo de dato debe coincidir con el escaneo anterior."),
+    "watch.duplicate": "Ya existe una vigilancia con id {watch_id}.",
+    "watch.missing": "No existe la vigilancia {watch_id}.",
+    "workspace.duplicate_watches": (
+        "El workspace contiene identificadores de vigilancia duplicados."
+    ),
+    "workspace.watch_model_expected": "Se esperaba un modelo de vigilancia de workspace.",
+    "workspace.pointer_chain_missing": (
+        "La vigilancia {label} referencia una cadena de punteros ausente."
+    ),
+    "watch.frozen_value_missing": "La vigilancia congelada no tiene un valor deseado.",
+    "process.open_access_denied": (
+        "Acceso denegado al PID {pid}. Ejecuta M@D-Engine como administrador "
+        "o elige un proceso de tu mismo nivel de integridad."
+    ),
+    "process.open_failed": (
+        "No se pudo abrir el PID {pid}. Actualiza la lista y vuelve a intentarlo."
+    ),
+    "process.note.protected": "proceso protegido",
+    "process.note.unavailable": "acceso no disponible",
+    "process.note.path_inaccessible": "ruta no accesible",
+    "process.note.finished": "proceso finalizado",
     "workspace.filter": "Workspace de M@D-Engine (*.json)",
     "watch.column.name": "Nombre",
     "watch.column.address": "Dirección",
     "watch.column.type": "Tipo",
     "watch.column.value": "Valor",
     "watch.column.desired": "Deseado",
+    "architecture.unknown": "Desconocida",
+    "error.qt_instance": "Existe una instancia Qt que no es QApplication.",
+    "agent.provider_busy": (
+        "Espera a que termine la respuesta actual antes de cambiar el proveedor."
+    ),
+    "settings.agent_busy": (
+        "Espera a que termine la respuesta actual antes de cambiar los ajustes."
+    ),
+    "results.unknown_order_column": "Columna de orden desconocida: {column}",
+    "watch.partial_write_detail": (
+        "Escritura parcial: {written} de {expected} bytes en {address}."
+    ),
+    "region.private": "Privada",
+    "region.image": "Imagen",
+    "region.mapped": "Mapeada",
+    "region.unknown": "Desconocida",
     "watch.column.frozen": "Congelado",
     "watch.column.interval": "Intervalo",
     "watch.column.notes": "Notas",
@@ -488,6 +922,44 @@ STRINGS: dict[str, str] = {
 }
 
 
+class Language(StrEnum):
+    """Supported persistent interface languages."""
+
+    SPANISH = "es"
+    ENGLISH = "en"
+
+
+SPANISH_STRINGS = STRINGS
+CATALOGS: dict[Language, dict[str, str]] = {
+    Language.SPANISH: SPANISH_STRINGS,
+    Language.ENGLISH: ENGLISH_STRINGS,
+}
+if ENGLISH_STRINGS.keys() != SPANISH_STRINGS.keys():
+    missing = SPANISH_STRINGS.keys() - ENGLISH_STRINGS.keys()
+    extra = ENGLISH_STRINGS.keys() - SPANISH_STRINGS.keys()
+    raise RuntimeError(
+        f"English catalog mismatch: missing={sorted(missing)}, extra={sorted(extra)}"
+    )
+
+_language = Language.SPANISH
+
+
+def set_language(language: Language | str) -> None:
+    """Select the process-wide interface catalog for subsequently created widgets."""
+    global _language
+    _language = Language(language)
+
+
+def get_language() -> Language:
+    """Return the currently selected interface language."""
+    return _language
+
+
 def t(key: str, **kw: object) -> str:
-    """Translate a key and interpolate named values."""
-    return STRINGS[key].format(**kw)
+    """Translate a key in the active catalog and interpolate named values."""
+    return CATALOGS[_language][key].format(**kw)
+
+
+def architecture_label(value: str) -> str:
+    """Return a localized architecture name while preserving x86/x64 identifiers."""
+    return t("architecture.unknown") if value == "desconocida" else value

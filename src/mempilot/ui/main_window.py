@@ -719,12 +719,9 @@ class MainWindow(QMainWindow):
     @Slot()
     def open_settings(self) -> None:
         if self.orchestrator is not None and self.orchestrator.busy:
-            self.show_error(
-                MemPilotError(
-                    "Espera a que termine la respuesta actual antes de cambiar los ajustes."
-                )
-            )
+            self.show_error(MemPilotError(t("settings.agent_busy")))
             return
+        previous_language = self.settings.ui.language
         dialog = SettingsDialog(self.settings, self.settings_service, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
@@ -735,7 +732,12 @@ class MainWindow(QMainWindow):
             self.chat_panel.set_ai_enabled(self.orchestrator.available)
             self.chat_panel.set_mode(self.orchestrator.policy.mode.value)
             self.overlay.set_ai_enabled(self.orchestrator.available)
-        self.status_strip.set_message(t("settings.saved"), "success")
+        message_key = (
+            "settings.language_restart"
+            if self.settings.ui.language is not previous_language
+            else "settings.saved"
+        )
+        self.status_strip.set_message(t(message_key), "success")
 
     @Slot()
     def show_help(self) -> None:

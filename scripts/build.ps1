@@ -29,6 +29,7 @@ $PyInstallerArgs = @(
 & .\.venv\Scripts\pyinstaller.exe @PyInstallerArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if (Test-Path "M@D-Engine.spec") { Remove-Item -Force "M@D-Engine.spec" }
+Copy-Item -Force "LICENSE" "dist\M@D-Engine\LICENSE"
 
 
 $Executable = [System.IO.Path]::GetFullPath("dist\M@D-Engine\M@D-Engine.exe")

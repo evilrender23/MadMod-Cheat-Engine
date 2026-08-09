@@ -20,6 +20,7 @@ from mempilot.core.data_types import DataType
 from mempilot.core.exceptions import TrainerError
 from mempilot.core.pointer_chain import PointerChain
 from mempilot.core.watcher import WatchEntry, WatchSpec
+from mempilot.i18n import t
 from mempilot.logging_setup import redact_secrets
 
 
@@ -53,7 +54,7 @@ class TrainerTrick(BaseModel):
     def validate_contract(self) -> TrainerTrick:
         """Reject ambiguous addresses and non-reversible write pairs."""
         if not self.name.strip():
-            raise ValueError("El nombre del truco no puede estar vacío.")
+            raise ValueError(t("trainer.name_required"))
         if self.address_mode == "absolute":
             valid = self.address is not None and self.module is None and self.chain is None
         elif self.address_mode == "module_offset":
@@ -66,9 +67,9 @@ class TrainerTrick(BaseModel):
         else:
             valid = self.chain is not None and self.address is None and self.module is None
         if not valid:
-            raise ValueError("La dirección persistida del truco es ambigua o está incompleta.")
+            raise ValueError(t("trainer.address_ambiguous"))
         if self.mode is TrickMode.WRITE_PAIR and self.disabled_value is None:
-            raise ValueError("Un truco de escritura reversible necesita un valor desactivado.")
+            raise ValueError(t("trainer.disabled_required"))
         self.name = self.name.strip()
         self.notes = self.notes.strip()
         return self
@@ -135,13 +136,11 @@ class TrainerService:
         try:
             catalog = TrainerCatalog.model_validate_json(path.read_text(encoding="utf-8"))
         except (OSError, ValidationError, ValueError) as exc:
-            raise TrainerError(
-                "El trainer guardado no es válido o usa una versión incompatible."
-            ) from exc
+            raise TrainerError(t("trainer.saved_invalid")) from exc
         if catalog.process_name.casefold() != identity.name.casefold():
-            raise TrainerError("El trainer guardado pertenece a otro proceso.")
+            raise TrainerError(t("trainer.wrong_process"))
         if catalog.architecture is not identity.architecture:
-            raise TrainerError("La arquitectura del trainer no coincide con el proceso adjunto.")
+            raise TrainerError(t("trainer.architecture_mismatch"))
         return catalog
 
     def save_trick(
@@ -158,7 +157,7 @@ class TrainerService:
     ) -> TrainerTrick:
         """Insert or replace a named trick while preserving its stable identifier."""
         if mode is TrickMode.WRITE_PAIR and disabled_value is None:
-            raise TrainerError("Un truco de escritura reversible necesita un valor desactivado.")
+            raise TrainerError(t("trainer.disabled_required"))
         catalog = self.load(identity)
         previous = next(
             (item for item in catalog.tricks if item.name.casefold() == name.strip().casefold()),
@@ -181,9 +180,7 @@ class TrainerService:
                 notes=notes,
             )
         except ValidationError as exc:
-            raise TrainerError(
-                "El truco no es válido. Revisa el nombre, la dirección y los valores."
-            ) from exc
+            raise TrainerError(t("trainer.trick_invalid")) from exc
         catalog.tricks = [item for item in catalog.tricks if item.id != trick.id]
         catalog.tricks.append(trick)
         catalog.updated_at = datetime.now(UTC)
@@ -205,7 +202,7 @@ class TrainerService:
             None,
         )
         if index is None:
-            raise TrainerError(f"No existe el truco guardado {trick_id}.")
+            raise TrainerError(t("trainer.missing", trick_id=trick_id))
         original = catalog.tricks[index]
         try:
             updated = TrainerTrick.model_validate(
@@ -216,9 +213,7 @@ class TrainerService:
                 }
             )
         except ValidationError as exc:
-            raise TrainerError(
-                "Los valores del truco no son válidos. Revisa el valor activado y desactivado."
-            ) from exc
+            raise TrainerError(t("trainer.values_invalid")) from exc
         catalog.tricks[index] = updated
         catalog.updated_at = datetime.now(UTC)
         self._save(catalog, self.catalog_path(identity.name))
@@ -228,7 +223,7 @@ class TrainerService:
         """Return one exact trick from the attached process catalog."""
         trick = next((item for item in self.load(identity).tricks if item.id == trick_id), None)
         if trick is None:
-            raise TrainerError(f"No existe el truco guardado {trick_id}.")
+            raise TrainerError(t("trainer.missing", trick_id=trick_id))
         return trick
 
     @staticmethod
@@ -242,9 +237,7 @@ class TrainerService:
             temporary.write_text(serialized, encoding="utf-8")
             temporary.replace(path)
         except OSError as exc:
-            raise TrainerError(
-                f"No se pudo guardar el trainer en {path}. Comprueba la carpeta y los permisos."
-            ) from exc
+            raise TrainerError(t("trainer.save_failed", path=path)) from exc
         finally:
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)

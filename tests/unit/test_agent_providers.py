@@ -21,6 +21,7 @@ from mempilot.agent.providers import (
 )
 from mempilot.config.settings import AISettings, CLIBackend
 from mempilot.core.exceptions import ProviderError
+from mempilot.i18n import Language, get_language, set_language
 
 _TOOL_SPEC = {
     "type": "function",
@@ -109,6 +110,23 @@ def test_cli_provider_runs_isolated_structured_turn_without_api_keys(
     assert turn.tool_calls[0].name == "read_address"
     assert turn.tool_calls[0].arguments_json == '{"address":4096}'
     assert turn.raw_output == []
+
+
+def test_cli_adapter_uses_english_rules_when_english_is_active() -> None:
+    previous = get_language()
+    try:
+        set_language(Language.ENGLISH)
+        prompt = providers_module._render_prompt(
+            "Safe instructions",
+            [{"role": "user", "content": "Read the value"}],
+            [_TOOL_SPEC],
+        )
+    finally:
+        set_language(previous)
+
+    assert "CLI ADAPTER RULES" in prompt
+    assert "MAD_MOD_ENGINE_INPUT=" in prompt
+    assert "REGLAS DEL ADAPTADOR CLI" not in prompt
 
 
 def test_antigravity_compacts_old_turns_instead_of_rejecting_long_conversation(

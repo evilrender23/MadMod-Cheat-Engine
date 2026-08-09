@@ -13,9 +13,10 @@ import mempilot.ui.main_window as main_window_module
 from mempilot.agent.providers import ScriptedProvider
 from mempilot.app import create_app
 from mempilot.branding import APP_NAME, ORGANIZATION_NAME
-from mempilot.config.settings import AISettings, CLIBackend, Settings
+from mempilot.config.settings import AISettings, CLIBackend, Settings, UISettings
 from mempilot.controller import AppController
 from mempilot.core.backend import Architecture, ProcessIdentity
+from mempilot.i18n import Language
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.settings_dialog import SettingsDialog
 
@@ -46,6 +47,7 @@ def test_ai_settings_select_cli_and_persist_without_api_fields(
     assert not hasattr(dialog, "base_url_edit")
     assert not hasattr(dialog, "retries_spin")
 
+    dialog.language_combo.setCurrentIndex(dialog.language_combo.findData("en"))
     dialog.provider_combo.setCurrentIndex(dialog.provider_combo.findData("agy"))
     dialog.executable_edit.setText("C:/custom/agy.exe")
     dialog.model_edit.clear()
@@ -55,6 +57,7 @@ def test_ai_settings_select_cli_and_persist_without_api_fields(
     assert loaded.schema_version == 2
     assert loaded.ai.provider is CLIBackend.ANTIGRAVITY
     assert loaded.ai.executable == "C:/custom/agy.exe"
+    assert loaded.ui.language is Language.ENGLISH
     assert loaded.ai.model is None
     raw = service.path.read_text(encoding="utf-8")
     assert "api_key" not in raw
@@ -115,4 +118,34 @@ def test_main_window_applies_integer_accepted_result_and_reopens_saved_ai_settin
     assert service.load().ai.provider is CLIBackend.ANTIGRAVITY
     assert window.orchestrator is not None
     assert window.orchestrator.provider is replacement_provider
+    window.close()
+
+
+def test_create_app_builds_main_window_in_persisted_english(
+    tmp_path: Path,
+    qtbot: QtBot,
+) -> None:
+    settings = Settings(
+        ai=AISettings(enabled=False),
+        ui=UISettings(language=Language.ENGLISH),
+    )
+    identity = ProcessIdentity(88, "target.exe", 2.0, None, Architecture.X64)
+    controller = AppController(
+        FakeMemoryBackend([(0x1000, bytearray(64), 0x04)], identity),
+        settings=settings,
+    )
+    _app, window = create_app(
+        [],
+        controller=controller,
+        settings=settings,
+        settings_service=SettingsService(tmp_path / "settings.json"),
+        no_ai=True,
+    )
+    qtbot.addWidget(window)
+    window.show()
+
+    assert window.top_bar.attach_button.text() == "Select process…"
+    assert window.top_bar.settings_button.text() == "Settings"
+    assert window.scan_panel.first_button.text() == "First scan"
+    assert window.chat_panel.send_button.text() == "Send"
     window.close()

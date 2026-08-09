@@ -59,6 +59,7 @@ from mempilot.core.exceptions import MemPilotError
 from mempilot.core.scan_session import FilterSpec, OrderSpec
 from mempilot.core.scanner import ScanOptions, ScanRequest
 from mempilot.core.watcher import WatchEntry, WatchSpec
+from mempilot.i18n import architecture_label, t
 from mempilot.services.trainer_service import TrainerTrickState
 
 _MAX_ROWS = 200
@@ -119,16 +120,16 @@ class ToolRegistry:
             if tool is None:
                 return self._serialize_error(
                     "unknown_tool",
-                    "La herramienta solicitada no existe.",
-                    "Usa una de las herramientas publicadas por M@D-Engine.",
+                    t("tool.unknown"),
+                    t("tool.use_published"),
                 )
             try:
                 arguments = tool.args_model.model_validate_json(arguments_json)
             except ValidationError:
                 return self._serialize_error(
                     "invalid_arguments",
-                    "Los argumentos no tienen el formato requerido.",
-                    "Corrige los campos indicados por el esquema estricto y vuelve a intentarlo.",
+                    t("tool.invalid_arguments"),
+                    t("tool.fix_schema"),
                 )
             result = tool.handler(arguments)
             return self._serialize(result)
@@ -136,19 +137,19 @@ class ToolRegistry:
             return self._serialize_error(
                 _error_code(exc),
                 exc.user_message(),
-                "Corrige la causa indicada y vuelve a intentar la operación.",
+                t("tool.fix_cause"),
             )
         except ValueError as exc:
             return self._serialize_error(
                 "invalid_operation",
-                str(exc) or "La operación solicitada no es válida.",
-                "Revisa los datos y el estado actual antes de volver a intentarlo.",
+                str(exc) or t("tool.invalid_operation"),
+                t("tool.review_state"),
             )
         except Exception:
             return self._serialize_error(
                 "internal_error",
-                "M@D-Engine no pudo completar la herramienta de forma segura.",
-                "Revisa el estado de la aplicación y vuelve a intentarlo.",
+                t("tool.safe_failure"),
+                t("tool.safe_hint"),
             )
 
     def _serialize(self, result: BaseModel) -> str:
@@ -157,8 +158,8 @@ class ToolRegistry:
             return serialized
         return self._serialize_error(
             "response_too_large",
-            "La respuesta supera el límite seguro de tamaño.",
-            "Usa un filtro más específico o solicita una página más pequeña.",
+            t("tool.response_large"),
+            t("tool.response_filter"),
         )
 
     @staticmethod
@@ -192,7 +193,7 @@ class ToolRegistry:
         return [
             ToolDef(
                 "list_processes",
-                "Lista procesos locales autorizados; úsala antes de proponer cuál seleccionar.",
+                t("tool.description.list_processes"),
                 ListProcessesArgs,
                 self._list_processes,
                 False,
@@ -201,7 +202,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "attach_process",
-                "Adjunta M@D-Engine a un PID; úsala solo tras la selección explícita del usuario.",
+                t("tool.description.attach_process"),
                 AttachProcessArgs,
                 self._attach_process,
                 True,
@@ -210,7 +211,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "detach_process",
-                "Desacopla el proceso actual; úsala cuando el usuario quiera terminar la sesión.",
+                t("tool.description.detach_process"),
                 DetachProcessArgs,
                 self._detach_process,
                 False,
@@ -219,7 +220,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "get_attached_process",
-                "Consulta el proceso vinculado; úsala para confirmar identidad y arquitectura.",
+                t("tool.description.get_attached_process"),
                 GetAttachedProcessArgs,
                 self._get_attached_process,
                 False,
@@ -228,7 +229,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "start_scan",
-                "Inicia un primer escaneo tipado; úsala después de conocer el valor inicial.",
+                t("tool.description.start_scan"),
                 StartScanArgs,
                 self._start_scan,
                 False,
@@ -237,8 +238,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "refine_scan",
-                "Refina los candidatos actuales; úsala después de que el usuario "
-                "provoque un cambio.",
+                t("tool.description.refine_scan"),
                 RefineScanArgs,
                 self._refine_scan,
                 False,
@@ -247,7 +247,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "cancel_scan",
-                "Cancela el escaneo en curso; úsala cuando el usuario lo solicite.",
+                t("tool.description.cancel_scan"),
                 CancelScanArgs,
                 self._cancel_scan,
                 False,
@@ -256,7 +256,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "get_scan_status",
-                "Consulta estado y candidatos; úsala antes de decidir el siguiente paso.",
+                t("tool.description.get_scan_status"),
                 GetScanStatusArgs,
                 self._get_scan_status,
                 False,
@@ -265,8 +265,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "list_scan_results",
-                "Devuelve una página acotada de candidatos; úsala para inspeccionar "
-                "pocos resultados.",
+                t("tool.description.list_scan_results"),
                 ListScanResultsArgs,
                 self._list_scan_results,
                 False,
@@ -275,7 +274,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "read_address",
-                "Lee una dirección conocida con un tipo concreto; nunca inventes la dirección.",
+                t("tool.description.read_address"),
                 ReadAddressArgs,
                 self._read_address,
                 False,
@@ -284,7 +283,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "add_watch",
-                "Añade una dirección candidata a vigilancia; úsala cuando queden pocos candidatos.",
+                t("tool.description.add_watch"),
                 AddWatchArgs,
                 self._add_watch,
                 False,
@@ -293,7 +292,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "list_watches",
-                "Lista las vigilancias actuales; úsala antes de escribir, congelar o eliminar.",
+                t("tool.description.list_watches"),
                 ListWatchesArgs,
                 self._list_watches,
                 False,
@@ -302,7 +301,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "list_trainer_tricks",
-                "Lista los trucos guardados para el proceso adjunto y su estado actual.",
+                t("tool.description.list_trainer_tricks"),
                 ListTrainerTricksArgs,
                 self._list_trainer_tricks,
                 False,
@@ -311,8 +310,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "save_trainer_trick",
-                "Guarda como trainer una vigilancia ya probada. Llámala únicamente después "
-                "de que el usuario diga que el truco funciona; siempre exige confirmación.",
+                t("tool.description.save_trainer_trick"),
                 SaveTrainerTrickArgs,
                 self._save_trainer_trick,
                 True,
@@ -322,7 +320,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "write_watch",
-                "Escribe un valor en una vigilancia existente; requiere autorización de escritura.",
+                t("tool.description.write_watch"),
                 WriteWatchArgs,
                 self._write_watch,
                 True,
@@ -331,8 +329,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "freeze_watch",
-                "Congela una vigilancia en un valor; requiere autorización "
-                "y tiene escritura periódica.",
+                t("tool.description.freeze_watch"),
                 FreezeWatchArgs,
                 self._freeze_watch,
                 True,
@@ -341,7 +338,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "unfreeze_watch",
-                "Descongela una vigilancia; úsala para detener sus escrituras periódicas.",
+                t("tool.description.unfreeze_watch"),
                 UnfreezeWatchArgs,
                 self._unfreeze_watch,
                 False,
@@ -350,7 +347,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "remove_watch",
-                "Elimina una vigilancia; úsala solo para una entrada identificada por su id.",
+                t("tool.description.remove_watch"),
                 RemoveWatchArgs,
                 self._remove_watch,
                 False,
@@ -359,7 +356,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "save_workspace",
-                "Guarda la sesión en la carpeta segura de workspaces usando solo un nombre.",
+                t("tool.description.save_workspace"),
                 SaveWorkspaceArgs,
                 self._save_workspace,
                 False,
@@ -368,7 +365,7 @@ class ToolRegistry:
             ),
             ToolDef(
                 "load_workspace",
-                "Carga una sesión desde la carpeta segura de workspaces usando solo un nombre.",
+                t("tool.description.load_workspace"),
                 LoadWorkspaceArgs,
                 self._load_workspace,
                 True,
@@ -385,7 +382,7 @@ class ToolRegistry:
                 pid=entry.pid,
                 name=_clip(entry.name),
                 path=_clip_optional(entry.path),
-                architecture=entry.architecture.value,
+                architecture=architecture_label(entry.architecture.value),
                 username=_clip_optional(entry.username),
                 is_system=entry.is_system,
                 can_attach=entry.can_attach,
@@ -410,10 +407,8 @@ class ToolRegistry:
 
     def _detach_process(self, base: BaseModel) -> BaseModel:
         cast(DetachProcessArgs, base)
-        self.controller.detach(
-            "Desacoplado por el agente con autorización del usuario.", Actor.AGENT
-        )
-        return OperationResult(ok=True, message="Proceso desacoplado.")
+        self.controller.detach(t("tool.agent_detach_reason"), Actor.AGENT)
+        return OperationResult(ok=True, message=t("tool.process_detached"))
 
     def _get_attached_process(self, base: BaseModel) -> BaseModel:
         cast(GetAttachedProcessArgs, base)
@@ -465,7 +460,7 @@ class ToolRegistry:
         timeout_ms = _timeout(args.timeout_ms)
         status = self.controller.scan_status()
         if status.data_type is None:
-            raise ValueError("No hay un escaneo inicial cuyo tipo se pueda refinar.")
+            raise ValueError(t("tool.no_initial_scan_type"))
         request = ScanRequest(
             status.data_type, args.scan_mode, args.value, args.value2, ScanOptions()
         )
@@ -477,7 +472,7 @@ class ToolRegistry:
     def _cancel_scan(self, base: BaseModel) -> BaseModel:
         cast(CancelScanArgs, base)
         self.controller.cancel_scan()
-        return OperationResult(ok=True, message="Cancelación solicitada.")
+        return OperationResult(ok=True, message=t("tool.scan_cancel_requested"))
 
     def _get_scan_status(self, base: BaseModel) -> BaseModel:
         cast(GetScanStatusArgs, base)
@@ -572,7 +567,7 @@ class ToolRegistry:
         cast(ListTrainerTricksArgs, base)
         identity = self.controller.attached_identity()
         if identity is None:
-            raise ValueError("No hay ningún proceso adjunto.")
+            raise ValueError(t("tool.no_attached_process"))
         states = self.controller.list_trainer_tricks(Actor.AGENT)
         return TrainerTrickListResult(
             ok=True,
@@ -585,7 +580,7 @@ class ToolRegistry:
         args = cast(SaveTrainerTrickArgs, base)
         identity = self.controller.attached_identity()
         if identity is None:
-            raise ValueError("No hay ningún proceso adjunto.")
+            raise ValueError(t("tool.no_attached_process"))
         interval_ms = 100 if args.interval_ms is None else args.interval_ms
         trick = self.controller.save_trainer_trick(
             args.watch_id,
@@ -611,36 +606,36 @@ class ToolRegistry:
     def _write_watch(self, base: BaseModel) -> BaseModel:
         args = cast(WriteWatchArgs, base)
         self.controller.set_watch_value(args.watch_id, args.value, Actor.AGENT)
-        return OperationResult(ok=True, message="Valor escrito en la vigilancia.")
+        return OperationResult(ok=True, message=t("watch.write_ok"))
 
     def _freeze_watch(self, base: BaseModel) -> BaseModel:
         args = cast(FreezeWatchArgs, base)
         interval_ms = 100 if args.interval_ms is None else args.interval_ms
         self.controller.set_freeze(args.watch_id, True, args.value, interval_ms, Actor.AGENT)
-        return OperationResult(ok=True, message="Vigilancia congelada.")
+        return OperationResult(ok=True, message=t("tool.watch_frozen"))
 
     def _unfreeze_watch(self, base: BaseModel) -> BaseModel:
         args = cast(UnfreezeWatchArgs, base)
         watch = _find_watch(self.controller.list_watches(), args.watch_id)
         self.controller.set_freeze(args.watch_id, False, None, watch.interval_ms, Actor.AGENT)
-        return OperationResult(ok=True, message="Vigilancia descongelada.")
+        return OperationResult(ok=True, message=t("tool.watch_unfrozen"))
 
     def _remove_watch(self, base: BaseModel) -> BaseModel:
         args = cast(RemoveWatchArgs, base)
         self.controller.remove_watch(args.watch_id, Actor.AGENT)
-        return OperationResult(ok=True, message="Vigilancia eliminada.")
+        return OperationResult(ok=True, message=t("tool.watch_removed"))
 
     def _save_workspace(self, base: BaseModel) -> BaseModel:
         args = cast(SaveWorkspaceArgs, base)
         path = _workspace_path(args.name)
         self.controller.save_workspace(path, Actor.AGENT)
-        return WorkspaceResult(ok=True, name=path.stem, message="Workspace guardado.")
+        return WorkspaceResult(ok=True, name=path.stem, message=t("tool.workspace_saved"))
 
     def _load_workspace(self, base: BaseModel) -> BaseModel:
         args = cast(LoadWorkspaceArgs, base)
         path = _workspace_path(args.name)
         self.controller.load_workspace(path, Actor.AGENT)
-        return WorkspaceResult(ok=True, name=path.stem, message="Workspace cargado.")
+        return WorkspaceResult(ok=True, name=path.stem, message=t("tool.workspace_loaded"))
 
 
 def _attached_result(identity: ProcessIdentity, write_access: bool | None) -> AttachedProcessResult:
@@ -650,7 +645,7 @@ def _attached_result(identity: ProcessIdentity, write_access: bool | None) -> At
         pid=identity.pid,
         name=_clip(identity.name),
         path=_clip_optional(identity.path),
-        architecture=identity.architecture.value,
+        architecture=architecture_label(identity.architecture.value),
         write_access=write_access,
     )
 
@@ -691,32 +686,32 @@ def _find_watch(entries: list[WatchEntry], watch_id: str) -> WatchEntry:
     for entry in entries:
         if entry.id == watch_id:
             return entry
-    raise ValueError("La vigilancia indicada no existe. Actualiza la lista y elige un id válido.")
+    raise ValueError(t("tool.watch_missing"))
 
 
 def _workspace_path(name: str) -> Path:
     raw = name.strip()
     if not raw:
-        raise ValueError("El nombre del workspace no puede estar vacío.")
+        raise ValueError(t("tool.workspace_name_required"))
     if ".." in raw or "/" in raw or "\\" in raw or ":" in raw:
-        raise ValueError("Indica solo un nombre de workspace, no una ruta.")
+        raise ValueError(t("tool.workspace_name_only"))
     without_suffix = raw[:-5] if raw.casefold().endswith(".json") else raw
     normalized = unicodedata.normalize("NFKD", without_suffix)
     ascii_name = normalized.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", ascii_name).strip("-_").casefold()
     if not slug:
-        raise ValueError("El nombre del workspace debe contener letras o números.")
+        raise ValueError(t("tool.workspace_name_alnum"))
     root = WORKSPACE_DIR.resolve()
     path = (root / f"{slug}.json").resolve()
     if not path.is_relative_to(root):
-        raise ValueError("El workspace debe permanecer en la carpeta segura de M@D-Engine.")
+        raise ValueError(t("tool.workspace_confined"))
     return path
 
 
 def _timeout(value: int | None) -> int:
     timeout = _DEFAULT_TIMEOUT_MS if value is None else value
     if not 1 <= timeout <= 120_000:
-        raise ValueError("El tiempo de espera debe estar entre 1 y 120000 ms.")
+        raise ValueError(t("tool.timeout_range"))
     return timeout
 
 

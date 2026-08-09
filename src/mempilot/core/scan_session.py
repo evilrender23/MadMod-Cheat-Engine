@@ -22,6 +22,7 @@ from mempilot.core.scanner import (
     ScanRequest,
     UnknownSnapshot,
 )
+from mempilot.i18n import Language, get_language, t
 
 
 class SessionState(StrEnum):
@@ -199,7 +200,7 @@ class ScanSession:
     ) -> list[CandidateRow]:
         """Return a filtered, ordered page without materializing every row object."""
         if offset < 0 or limit < 0:
-            raise ValueError("El desplazamiento y el límite no pueden ser negativos")
+            raise ValueError(t("results.offset_limit_nonnegative"))
         if not isinstance(self.result, CandidateSet) or not len(self.result) or limit == 0:
             return []
         result = self.result
@@ -246,7 +247,7 @@ class ScanSession:
                 regions = self._region_labels(addresses)
             keys = regions[indices]
         else:
-            raise ValueError(f"Columna de orden desconocida: {order.column}")
+            raise ValueError(t("results.unknown_order_column", column=order.column))
         sorted_positions = np.argsort(keys, kind="stable")
         if order.descending:
             sorted_positions = sorted_positions[::-1]
@@ -340,15 +341,18 @@ class ScanSession:
         return refreshed
 
     def stats(self) -> dict[str, str]:
-        """Return already formatted Spanish statistics for the scan panel."""
+        """Return formatted statistics for the scan panel."""
+        total = f"{self.total():,}"
+        if get_language() is Language.SPANISH:
+            total = total.replace(",", ".")
         return {
-            "Candidatos": f"{self.total():,}".replace(",", "."),
-            "Regiones analizadas": str(self.regions_scanned),
-            "Bytes analizados": self._format_bytes(self.bytes_scanned),
-            "Duración del último escaneo": f"{self.last_duration_s:.2f} s",
-            "Refinamientos": str(len(self.history)),
-            "Tipo": self.data_type.value,
-            "Última condición": self.last_mode.value if self.last_mode else "—",
+            t("scan.stats.candidates"): total,
+            t("scan.stats.regions"): str(self.regions_scanned),
+            t("scan.stats.bytes"): self._format_bytes(self.bytes_scanned),
+            t("scan.stats.duration"): f"{self.last_duration_s:.2f} s",
+            t("scan.stats.refinements"): str(len(self.history)),
+            t("scan.stats.type"): self.data_type.value,
+            t("scan.stats.last_condition"): self.last_mode.value if self.last_mode else "—",
         }
 
     @staticmethod
@@ -357,6 +361,9 @@ class ScanSession:
         for suffix in ("B", "KB", "MB", "GB", "TB"):
             if value < 1024.0 or suffix == "TB":
                 decimals = 0 if suffix == "B" else 1
-                return f"{value:.{decimals}f} {suffix}".replace(".", ",")
+                formatted = f"{value:.{decimals}f} {suffix}"
+                return (
+                    formatted.replace(".", ",") if get_language() is Language.SPANISH else formatted
+                )
             value /= 1024.0
         raise AssertionError("unreachable")

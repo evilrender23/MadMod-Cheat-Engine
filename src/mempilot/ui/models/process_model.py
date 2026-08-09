@@ -13,7 +13,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from mempilot.core.process_service import ProcessEntry
-from mempilot.i18n import t
+from mempilot.i18n import architecture_label, t
 from mempilot.ui.theme import DISABLED
 
 _ROOT_INDEX = QModelIndex()
@@ -65,7 +65,7 @@ class ProcessModel(QAbstractTableModel):
             values = (
                 entry.name,
                 str(entry.pid),
-                entry.architecture.value,
+                architecture_label(entry.architecture.value),
                 entry.username or "—",
                 entry.path or "—",
                 entry.note

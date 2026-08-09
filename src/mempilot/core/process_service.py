@@ -11,6 +11,7 @@ from mempilot.core.backend import Architecture, ProcessIdentity
 from mempilot.core.exceptions import ProcessNotAllowedError, ProcessNotFoundError
 from mempilot.core.win32_api import PROCESS_QUERY_INFORMATION, PROCESS_VM_READ, kernel32
 from mempilot.core.win32_backend import architecture_from_handle
+from mempilot.i18n import t
 
 NEVER_ATTACH = {
     "system",
@@ -99,11 +100,11 @@ class ProcessService:
             if protected or pid == own_pid:
                 architecture = Architecture.UNKNOWN
                 can_attach = False
-                note = self._append_note(note, "proceso protegido")
+                note = self._append_note(note, t("process.note.protected"))
             else:
                 architecture, can_attach = self._probe_process(pid)
                 if not can_attach:
-                    note = self._append_note(note, "acceso no disponible")
+                    note = self._append_note(note, t("process.note.unavailable"))
             entries.append(
                 ProcessEntry(
                     pid=pid,
@@ -123,35 +124,24 @@ class ProcessService:
     def identity(self, pid: int) -> ProcessIdentity:
         """Build a stable process identity or reject protected targets."""
         if pid in {0, 4, os.getpid()}:
-            raise ProcessNotAllowedError(
-                f"El PID {pid} está protegido. Selecciona un proceso de usuario autorizado."
-            )
+            raise ProcessNotAllowedError(t("process.pid_protected", pid=pid))
         try:
             process = psutil.Process(pid)
             name = process.name()
             create_time = float(process.create_time())
         except (psutil.NoSuchProcess, psutil.ZombieProcess):
-            raise ProcessNotFoundError(
-                f"El PID {pid} ya no existe. Actualiza la lista y selecciona otro proceso."
-            ) from None
+            raise ProcessNotFoundError(t("process.pid_missing", pid=pid)) from None
         except psutil.AccessDenied:
-            raise ProcessNotAllowedError(
-                f"No se puede comprobar el PID {pid}. Selecciona un proceso de usuario autorizado."
-            ) from None
+            raise ProcessNotAllowedError(t("process.pid_uncheckable", pid=pid)) from None
 
         if self._is_never_attach(pid, name.casefold()):
-            raise ProcessNotAllowedError(
-                f"El proceso {name} (PID {pid}) está protegido. "
-                "Selecciona un proceso de usuario autorizado."
-            )
+            raise ProcessNotAllowedError(t("process.name_protected", name=name, pid=pid))
         try:
             path = process.exe() or None
         except psutil.AccessDenied:
             path = None
         except (psutil.NoSuchProcess, psutil.ZombieProcess):
-            raise ProcessNotFoundError(
-                f"El PID {pid} terminó durante la consulta. Actualiza la lista."
-            ) from None
+            raise ProcessNotFoundError(t("process.pid_finished", pid=pid)) from None
         architecture, _ = self._probe_process(pid)
         return ProcessIdentity(
             pid=pid,
@@ -185,9 +175,9 @@ class ProcessService:
         try:
             return process.exe() or None, ""
         except psutil.AccessDenied:
-            return None, "ruta no accesible"
+            return None, t("process.note.path_inaccessible")
         except (psutil.NoSuchProcess, psutil.ZombieProcess):
-            return None, "proceso finalizado"
+            return None, t("process.note.finished")
 
     @staticmethod
     def _is_system_account(username: str | None) -> bool:

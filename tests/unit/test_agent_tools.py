@@ -13,6 +13,7 @@ from mempilot.controller import Actor
 from mempilot.core.backend import Architecture, ProcessIdentity
 from mempilot.core.data_types import DataType
 from mempilot.core.process_service import ProcessEntry
+from mempilot.i18n import Language, get_language, set_language
 from mempilot.services.trainer_service import TrainerTrick, TrainerTrickState, TrickMode
 
 
@@ -128,6 +129,19 @@ def test_registry_publishes_exact_step_31_tool_set() -> None:
         "save_workspace",
         "load_workspace",
     }
+
+
+def test_registry_publishes_english_tool_descriptions_when_selected() -> None:
+    previous = get_language()
+    try:
+        set_language(Language.ENGLISH)
+        tools = _registry().tools
+    finally:
+        set_language(previous)
+
+    descriptions = {tool.name: tool.description for tool in tools}
+    assert descriptions["list_processes"].startswith("List authorized local processes")
+    assert descriptions["save_trainer_trick"].startswith("Save an already tested watch")
 
 
 def test_execute_rejects_unknown_arguments_without_calling_handler() -> None:

@@ -24,6 +24,7 @@ from mempilot.core.data_types import (
     type_size,
 )
 from mempilot.core.exceptions import ScanCancelled, ScanError, ValueParseError
+from mempilot.i18n import t
 
 _MEM_PRIVATE = 0x20000
 _MEM_MAPPED = 0x40000
@@ -95,48 +96,48 @@ class ScanRequest:
         """Validate a scan request before touching process memory."""
         opts = self.options
         if opts.alignment < 0:
-            raise ValueParseError("La alineación no puede ser negativa. Usa Automática o 1 byte.")
+            raise ValueParseError(t("scan.validation.alignment_negative"))
         if opts.chunk_size <= 0:
-            raise ValueParseError("El tamaño de bloque debe ser mayor que cero.")
+            raise ValueParseError(t("scan.validation.chunk_positive"))
         if opts.max_candidates <= 0:
-            raise ValueParseError("El límite de candidatos debe ser mayor que cero.")
+            raise ValueParseError(t("scan.validation.candidates_positive"))
         if opts.unknown_budget_mb < 0:
-            raise ValueParseError("El presupuesto de memoria no puede ser negativo.")
+            raise ValueParseError(t("scan.validation.budget_nonnegative"))
         if opts.address_min < 0 or opts.address_max < opts.address_min:
-            raise ValueParseError("El rango de direcciones no es válido. Corrige sus límites.")
+            raise ValueParseError(t("scan.validation.range"))
         if opts.float_tolerance < 0:
-            raise ValueParseError("La tolerancia no puede ser negativa.")
+            raise ValueParseError(t("scan.validation.tolerance"))
         if self.data_type is DataType.BYTES:
-            raise ValueParseError("Bytes es un formato de visualización y no se puede escanear.")
+            raise ValueParseError(t("scan.validation.bytes"))
         if self.mode is ScanMode.AOB and self.data_type is not DataType.AOB:
-            raise ValueParseError("La condición AOB requiere el tipo de dato AOB.")
+            raise ValueParseError(t("scan.validation.aob_type"))
         if self.data_type is DataType.AOB and self.mode is not ScanMode.AOB:
-            raise ValueParseError("El tipo AOB solo admite la condición AOB.")
+            raise ValueParseError(t("scan.validation.aob_mode"))
         if self.mode is ScanMode.TEXT and self.data_type not in {
             DataType.STRING_UTF8,
             DataType.STRING_UTF16,
         }:
-            raise ValueParseError("La condición Texto requiere un tipo de texto UTF-8 o UTF-16.")
+            raise ValueParseError(t("scan.validation.text_type"))
         if (
             self.data_type in {DataType.STRING_UTF8, DataType.STRING_UTF16}
             and self.mode is not ScanMode.TEXT
         ):
-            raise ValueParseError("Los tipos de texto solo admiten la condición Texto.")
+            raise ValueParseError(t("scan.validation.text_mode"))
         if (
             self.mode in _RELATIVE_MODES | {ScanMode.UNKNOWN_INITIAL}
             and self.data_type not in NUMERIC_TYPES
         ):
-            raise ValueParseError("Esta condición requiere un tipo numérico.")
+            raise ValueParseError(t("scan.validation.numeric_type"))
         if self.mode in _VALUELESS_MODES:
             if self.value is not None:
-                raise ValueParseError("Esta condición no admite un valor de búsqueda.")
+                raise ValueParseError(t("scan.validation.valueless"))
         elif self.value is None:
-            raise ValueParseError("Esta condición requiere un valor de búsqueda.")
+            raise ValueParseError(t("scan.validation.required"))
         if self.mode is ScanMode.BETWEEN:
             if self.value2 is None:
-                raise ValueParseError("Entre requiere un límite superior en Valor 2.")
+                raise ValueParseError(t("scan.validation.value2"))
         elif self.value2 is not None:
-            raise ValueParseError("Valor 2 solo se usa con la condición Entre.")
+            raise ValueParseError(t("scan.validation.value2_only"))
         if self.mode in {
             ScanMode.AOB,
             ScanMode.TEXT,
@@ -158,7 +159,7 @@ class ScanRequest:
             high = parse_value(self.data_type, self.value2)
             assert isinstance(low, (int, float)) and isinstance(high, (int, float))
             if low > high:
-                raise ValueParseError("El límite inferior de Entre no puede superar al superior.")
+                raise ValueParseError(t("scan.validation.between_order"))
 
 
 @dataclass(slots=True)
@@ -235,7 +236,7 @@ def kernel_compare(
 ) -> NDArray[np.bool_]:
     """Compare current and previous numeric values for a refinement mode."""
     if cur.shape != prev.shape:
-        raise ValueError("Los vectores actual y anterior deben tener la misma forma")
+        raise ValueError(t("scan.vector_shape_mismatch"))
     equal = _equal_values(cur, prev, tol)
     if mode is ScanMode.CHANGED:
         return ~equal
@@ -246,20 +247,20 @@ def kernel_compare(
     if mode is ScanMode.DECREASED:
         return np.asarray(cur < prev, dtype=np.bool_)
     if delta is None:
-        raise ValueError("Esta comparación requiere un delta")
+        raise ValueError(t("scan.delta_required"))
     if mode is ScanMode.INCREASED_BY:
         target = prev + delta
     elif mode is ScanMode.DECREASED_BY:
         target = prev - delta
     else:
-        raise ValueError(f"Modo de comparación no compatible: {mode.value}")
+        raise ValueError(t("scan.comparison_unsupported", mode=mode.value))
     return _equal_values(cur, np.asarray(target, dtype=cur.dtype), tol)
 
 
 def kernel_aob(buf: NDArray[np.uint8], pattern: bytes, mask: bytes) -> NDArray[np.int64]:
     """Return start offsets matching a byte pattern with full-byte wildcards."""
     if not pattern or len(pattern) != len(mask):
-        raise ValueError("El patrón y la máscara deben tener la misma longitud no nula")
+        raise ValueError(t("scan.pattern_mask_length"))
     if buf.size < len(pattern):
         return np.empty(0, dtype=np.int64)
     windows = np.lib.stride_tricks.sliding_window_view(buf, len(pattern))
@@ -400,7 +401,7 @@ class ScanEngine:
         if req.mode is ScanMode.UNKNOWN_INITIAL:
             return self._capture_unknown(regions, req, cancel, on_progress)
         if req.mode in _RELATIVE_MODES:
-            raise ValueParseError("Este modo necesita un escaneo anterior para poder comparar.")
+            raise ValueParseError(t("scan.previous_required"))
         return self._scan_regions(regions, req, cancel, on_progress)
 
     def _scan_regions(
@@ -504,15 +505,12 @@ class ScanEngine:
             return np.flatnonzero(values > needle).astype(np.int64, copy=False)
         if req.mode is ScanMode.LESS_THAN:
             return np.flatnonzero(values < needle).astype(np.int64, copy=False)
-        raise ValueParseError("Esta condición no es válida para un primer escaneo numérico.")
+        raise ValueParseError(t("scan.first_numeric_invalid"))
 
     @staticmethod
     def _check_candidate_limit(count: int, maximum: int) -> None:
         if count > maximum:
-            raise ScanError(
-                f"Demasiados candidatos (>{maximum}). Usa un valor más específico o reduce "
-                "el rango de regiones."
-            )
+            raise ScanError(t("scan.too_many", count=maximum))
 
     @staticmethod
     def _combine_candidates(
@@ -599,13 +597,11 @@ class ScanEngine:
         """Refine candidates without rescanning every memory region."""
         req.validate()
         if req.mode is ScanMode.UNKNOWN_INITIAL:
-            raise ValueParseError(
-                "Valor desconocido inicial solo puede usarse en el primer escaneo."
-            )
+            raise ValueParseError(t("scan.unknown_initial_only"))
         if isinstance(previous, UnknownSnapshot):
             return self._refine_unknown(previous, req, cancel, on_progress)
         if previous.data_type is not req.data_type:
-            raise ValueParseError("El tipo de dato debe coincidir con el escaneo anterior.")
+            raise ValueParseError(t("scan.previous_type_mismatch"))
         return self._refine_candidates(previous, req, cancel, on_progress)
 
     def _refine_candidates(
@@ -711,7 +707,7 @@ class ScanEngine:
         elif req.mode is ScanMode.LESS_THAN:
             selected = np.flatnonzero(current < needle).astype(np.int64, copy=False)
         else:
-            raise ValueParseError("La condición no es válida para este refinamiento.")
+            raise ValueParseError(t("scan.refine_invalid"))
         mask = np.zeros(current.size, dtype=np.bool_)
         mask[selected] = True
         return mask
@@ -749,7 +745,7 @@ class ScanEngine:
                 current_value == old_value
                 for current_value, old_value in zip(current, old, strict=True)
             ]
-        raise ValueParseError("La condición no es válida para datos de longitud variable.")
+        raise ValueParseError(t("scan.variable_invalid"))
 
     def _refine_unknown(
         self,
@@ -759,9 +755,7 @@ class ScanEngine:
         on_progress: Callable[[ScanProgress], None],
     ) -> CandidateSet:
         if req.data_type not in NUMERIC_TYPES or req.mode not in _RELATIVE_MODES:
-            raise ValueParseError(
-                "Un escaneo de valor desconocido debe refinarse con una comparación numérica."
-            )
+            raise ValueParseError(t("scan.unknown_refine_numeric"))
         total_bytes = sum(len(raw) for _, raw in previous.chunks)
         reporter = _ProgressReporter(on_progress, total_bytes, len(previous.chunks))
         addresses_parts: list[NDArray[np.uint64]] = []

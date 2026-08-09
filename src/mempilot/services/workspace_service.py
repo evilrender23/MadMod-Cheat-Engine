@@ -11,6 +11,7 @@ from mempilot.core.backend import Architecture
 from mempilot.core.data_types import DataType
 from mempilot.core.exceptions import WorkspaceError
 from mempilot.core.pointer_chain import PointerChain
+from mempilot.i18n import t
 from mempilot.logging_setup import redact_secrets
 
 
@@ -62,9 +63,7 @@ def save_workspace(path: Path, ws: WorkspaceModel) -> None:
         temporary.write_text(serialized, encoding="utf-8")
         temporary.replace(path)
     except OSError as exc:
-        raise WorkspaceError(
-            f"No se pudo guardar el workspace en {path}. Comprueba la carpeta y los permisos."
-        ) from exc
+        raise WorkspaceError(t("workspace.save_failed", path=path)) from exc
     finally:
         with suppress(OSError):
             temporary.unlink(missing_ok=True)
@@ -76,7 +75,4 @@ def load_workspace(path: Path) -> WorkspaceModel:
         raw = path.read_text(encoding="utf-8")
         return WorkspaceModel.model_validate_json(raw)
     except (OSError, ValidationError, ValueError) as exc:
-        raise WorkspaceError(
-            "El workspace no es válido o usa una versión incompatible. "
-            "Selecciona un archivo de esquema 1 o crea uno nuevo."
-        ) from exc
+        raise WorkspaceError(t("workspace.version_invalid")) from exc

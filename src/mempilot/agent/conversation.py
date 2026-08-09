@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from mempilot.agent.providers import ProviderTurn, ToolCall
+from mempilot.i18n import t
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +28,7 @@ class Conversation:
         """Append a user message to both replay and visible transcript."""
         normalized = text.strip()
         if not normalized:
-            raise ValueError("El mensaje no puede estar vacío.")
+            raise ValueError(t("chat.message_required"))
         self.input_items.append({"role": "user", "content": normalized})
         self.messages.append(ConversationMessage("user", normalized))
 

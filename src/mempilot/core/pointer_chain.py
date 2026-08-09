@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 from mempilot.core.backend import MemoryBackend, ModuleInfo
 from mempilot.core.data_types import DataType, format_hex
+from mempilot.i18n import t
 
 
 class PointerChain(BaseModel):
@@ -59,39 +60,41 @@ def resolve_chain(
         None,
     )
     if module is None:
-        return ChainResolution([], None, f"módulo '{chain.module}' no cargado")
+        return ChainResolution([], None, t("pointer.module_not_loaded", module=repr(chain.module)))
     address = module.base + chain.base_offset
     steps: list[ChainStep] = []
     try:
         pointer_size = backend.pointer_size
     except Exception:
-        return ChainResolution([], None, f"lectura fallida en {_format_address(address)}")
+        return ChainResolution(
+            [], None, t("pointer.read_failed_at", address=_format_address(address))
+        )
     for index, offset in enumerate(chain.offsets, start=1):
         try:
             raw = backend.read(address, pointer_size)
         except Exception:
-            steps.append(ChainStep(index, address, None, False, "lectura fallida"))
+            steps.append(ChainStep(index, address, None, False, t("pointer.read_failed")))
             return ChainResolution(
                 steps,
                 None,
-                f"lectura fallida en {_format_address(address)}",
+                t("pointer.read_failed_at", address=_format_address(address)),
             )
         if len(raw) != pointer_size:
-            steps.append(ChainStep(index, address, None, False, "lectura parcial"))
+            steps.append(ChainStep(index, address, None, False, t("pointer.partial_read")))
             return ChainResolution(
                 steps,
                 None,
-                f"lectura fallida en {_format_address(address)}",
+                t("pointer.read_failed_at", address=_format_address(address)),
             )
         pointer = int.from_bytes(raw, byteorder="little", signed=False)
         if pointer == 0:
-            steps.append(ChainStep(index, address, pointer, False, "puntero nulo"))
+            steps.append(ChainStep(index, address, pointer, False, t("pointer.null")))
             return ChainResolution(
                 steps,
                 None,
-                f"puntero nulo en el paso {index}",
+                t("pointer.null_at_step", step=index),
             )
-        steps.append(ChainStep(index, address, pointer, True, "resuelto"))
+        steps.append(ChainStep(index, address, pointer, True, t("pointer.resolved")))
         address = pointer + offset
     return ChainResolution(steps, address, None)
 

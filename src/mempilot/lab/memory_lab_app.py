@@ -380,7 +380,7 @@ def run_lab(argv: list[str] | None = None) -> int:
     elif isinstance(instance, QApplication):
         app = instance
     else:
-        raise RuntimeError("Ya existe una aplicación Qt incompatible.")
+        raise RuntimeError(t("error.qt_application_incompatible"))
 
     app.setApplicationName(f"{APP_NAME} Memory Lab")
     app.setApplicationDisplayName(f"{PRODUCT_NAME} Memory Lab")

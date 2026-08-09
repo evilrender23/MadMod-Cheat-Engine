@@ -39,6 +39,7 @@ from mempilot.core.win32_api import (
     STILL_ACTIVE,
     kernel32,
 )
+from mempilot.i18n import t
 
 
 def architecture_from_handle(handle: int) -> Architecture:
@@ -76,13 +77,8 @@ class Win32MemoryBackend(MemoryBackend):
         if not raw_handle:
             error = ctypes.get_last_error()
             if error == ERROR_ACCESS_DENIED:
-                raise AccessDeniedError(
-                    f"Acceso denegado al PID {identity.pid}. Ejecuta M@D-Engine como administrador "
-                    "o elige un proceso de tu mismo nivel de integridad."
-                )
-            raise ProcessNotFoundError(
-                f"No se pudo abrir el PID {identity.pid}. Actualiza la lista y vuelve a intentarlo."
-            )
+                raise AccessDeniedError(t("process.open_access_denied", pid=identity.pid))
+            raise ProcessNotFoundError(t("process.open_failed", pid=identity.pid))
         handle = int(raw_handle)
         detected = architecture_from_handle(handle)
         bound_identity = replace(identity, architecture=detected)
@@ -140,7 +136,7 @@ class Win32MemoryBackend(MemoryBackend):
     def read_into(self, address: int, buffer: memoryview) -> int:
         """Read without allocating and return zero on every total read failure."""
         if buffer.readonly:
-            raise ValueError("El búfer de lectura debe ser modificable")
+            raise ValueError(t("memory.buffer_writable"))
         view = buffer.cast("B")
         size = view.nbytes
         if size == 0:
@@ -164,16 +160,13 @@ class Win32MemoryBackend(MemoryBackend):
         with self._lock:
             handle = self._require_handle()
             if self._mode is AccessMode.READ:
-                raise WriteNotPermittedError(
-                    "La sesión es de solo lectura. Vuelve a adjuntarte con permiso de escritura."
-                )
+                raise WriteNotPermittedError(t("error.write_not_permitted"))
             if not data:
                 return 0
             region = query_region(handle, address)
             if not is_committed_writable(region, address, len(data)):
                 raise InvalidAddressError(
-                    f"La dirección 0x{address:016X} no pertenece a una región asignada y "
-                    "escribible. Actualiza los resultados e inténtalo de nuevo."
+                    t("memory.region_not_writable", address=f"0x{address:016X}")
                 )
             source = ctypes.create_string_buffer(data, len(data))
             copied = ctypes.c_size_t()
@@ -186,10 +179,7 @@ class Win32MemoryBackend(MemoryBackend):
             )
             written = int(copied.value)
             if not ok or written != len(data):
-                raise MemoryWriteError(
-                    f"No se pudo escribir la dirección 0x{address:016X}. "
-                    "Comprueba la protección de la región y vuelve a intentarlo."
-                )
+                raise MemoryWriteError(t("memory.write_address", address=f"0x{address:016X}"))
             return written
 
     def _require_handle(self) -> int:

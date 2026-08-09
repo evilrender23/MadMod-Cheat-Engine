@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
 from mempilot import __version__
 from mempilot.core.backend import ProcessIdentity
-from mempilot.i18n import t
+from mempilot.i18n import architecture_label, t
 from mempilot.ui.theme import SPACE_2, SPACE_3
 
 
@@ -82,7 +82,7 @@ class TopBar(QFrame):
                 "top.process_summary",
                 pid=identity.pid,
                 name=identity.name,
-                arch=identity.architecture.value,
+                arch=architecture_label(identity.architecture.value),
             )
         )
         state = t("status.connected")

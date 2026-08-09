@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 
 from mempilot.agent.conversation import Conversation
 from mempilot.agent.policies import AgentMode, AgentPolicy, Decision, FlowState
-from mempilot.agent.prompts import SYSTEM_PROMPT, state_line
+from mempilot.agent.prompts import state_line, system_prompt
 from mempilot.agent.providers import AIProvider
 from mempilot.agent.tools import ToolDef, ToolRegistry
 from mempilot.config.settings import AISettings
@@ -21,6 +21,7 @@ from mempilot.core.backend import ProcessIdentity
 from mempilot.core.exceptions import MemPilotError, ProviderError
 from mempilot.core.scan_session import ScanSession
 from mempilot.core.watcher import WatchEntry
+from mempilot.i18n import t
 from mempilot.ui.workers import ToolInvocation
 
 _MAX_TOOL_ROUNDS = 32
@@ -165,7 +166,7 @@ class AgentTurnJob:
                 return AgentRunResult(tuple(texts))
             snapshot = self._flow.snapshot()
             turn = self._provider.complete(
-                SYSTEM_PROMPT,
+                system_prompt(),
                 self._conversation.provider_input(
                     state_line(
                         snapshot.identity,
@@ -185,18 +186,13 @@ class AgentTurnJob:
                 if turn.text.strip():
                     self._flow.mark_awaiting_change()
                     return AgentRunResult(tuple(texts))
-                raise ProviderError(
-                    "El proveedor no devolvió texto ni herramientas. Inténtalo de nuevo."
-                )
+                raise ProviderError(t("agent.empty_turn"))
             for call in turn.tool_calls:
                 if cancel.is_set():
                     return AgentRunResult(tuple(texts))
                 result = request_tool(call.name, call.arguments_json, self._tool_timeout_s)
                 self._conversation.add_tool_output(call, result)
-        raise ProviderError(
-            "El agente superó el límite de pasos consecutivos. "
-            "Reformula la petición y continúa desde el estado actual."
-        )
+        raise ProviderError(t("agent.step_limit"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,9 +258,7 @@ class AgentOrchestrator(QObject):
     def configure_provider(self, provider: AIProvider | None, settings: AISettings) -> None:
         """Apply a CLI provider change and revoke any prior autonomous grant."""
         if self._busy:
-            raise ProviderError(
-                "Espera a que termine la respuesta actual antes de cambiar el proveedor."
-            )
+            raise ProviderError(t("agent.provider_busy"))
         self.provider = provider
         self.settings = settings.model_copy(deep=True)
         self.policy.write_limit = settings.autonomous_write_limit
@@ -339,8 +333,8 @@ class AgentOrchestrator(QObject):
                 raw_invocation,
                 _error_json(
                     "unknown_tool",
-                    "La herramienta solicitada no existe.",
-                    "Usa una herramienta publicada por M@D-Engine.",
+                    t("tool.unknown"),
+                    t("tool.use_published"),
                 ),
             )
             return
@@ -361,7 +355,7 @@ class AgentOrchestrator(QObject):
         if decision is Decision.DENY:
             self._finish_invocation(
                 raw_invocation,
-                _error_json("policy_denied", reason, "Sigue el paso indicado por la política."),
+                _error_json("policy_denied", reason, t("policy.follow_hint")),
             )
             return
         if decision is Decision.CONFIRM:
@@ -397,8 +391,8 @@ class AgentOrchestrator(QObject):
                 pending.invocation,
                 _error_json(
                     "confirmation_rejected",
-                    "El usuario rechazó la confirmación.",
-                    "No repitas la escritura sin una nueva indicación del usuario.",
+                    t("confirmation.rejected_error"),
+                    t("confirmation.rejected_hint"),
                 ),
             )
 
@@ -411,8 +405,8 @@ class AgentOrchestrator(QObject):
             pending.invocation,
             _error_json(
                 "confirmation_timeout",
-                "Confirmación expirada.",
-                "Pregunta al usuario si desea volver a intentarlo.",
+                t("confirmation.timeout_error"),
+                t("confirmation.timeout_hint"),
             ),
         )
 
@@ -449,26 +443,33 @@ class AgentOrchestrator(QObject):
                 None,
             )
             label = watch.label if watch is not None else watch_id
-            current = watch.current_value if watch is not None else "desconocido"
+            current = watch.current_value if watch is not None else t("confirmation.unknown")
             value = str(args.get("value", ""))
-            return f"{invocation.name}: {label}\nValor actual: {current}\nValor nuevo: {value}"
+            return t(
+                "confirmation.watch_detail",
+                action=invocation.name,
+                label=label,
+                current=current,
+                value=value,
+            )
         if invocation.name == "save_trainer_trick":
             identity = self.controller.attached_identity()
-            process_name = identity.name if identity is not None else "desconocido"
-            return (
-                "¿Confirmas que el truco funciona y quieres guardarlo?\n"
-                f"Proceso: {process_name}\n"
-                f"Truco: {args.get('name', '')}\n"
-                f"Activado: {args.get('enabled_value', '')}\n"
-                f"Desactivado: {args.get('disabled_value') or 'descongelar'}"
+            process_name = identity.name if identity is not None else t("confirmation.unknown")
+            return t(
+                "confirmation.trainer_detail",
+                process=process_name,
+                name=args.get("name", ""),
+                enabled=args.get("enabled_value", ""),
+                disabled=args.get("disabled_value") or t("confirmation.unfreeze"),
             )
         if invocation.name == "attach_process":
-            return (
-                f"Adjuntar al PID {args.get('pid')} con permiso de escritura: "
-                f"{'sí' if args.get('write_access') else 'no'}"
+            return t(
+                "confirmation.attach_detail",
+                pid=args.get("pid"),
+                write_access=t("ui.yes") if args.get("write_access") else t("ui.no"),
             )
         if invocation.name == "load_workspace":
-            return f"Cargar workspace: {args.get('name', '')}"
+            return t("confirmation.workspace_detail", name=args.get("name", ""))
         return f"{invocation.name}: {invocation.arguments_json}"
 
     @Slot(object)
@@ -479,9 +480,7 @@ class AgentOrchestrator(QObject):
         elif isinstance(event, MemPilotError):
             self.response_ready.emit(event.user_message())
         elif isinstance(event, BaseException):
-            self.response_ready.emit(
-                "El agente no pudo completar la solicitud. Revisa el estado e inténtalo de nuevo."
-            )
+            self.response_ready.emit(t("agent.request_failed"))
         elif isinstance(event, str):
             self.response_ready.emit(event)
         self._set_busy(False)

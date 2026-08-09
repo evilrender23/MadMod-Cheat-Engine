@@ -22,6 +22,7 @@ from mempilot.branding import (
 from mempilot.config.paths import ensure_dirs
 from mempilot.config.settings import Settings
 from mempilot.controller import AppController
+from mempilot.i18n import set_language, t
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.main_window import MainWindow
 from mempilot.ui.theme import apply_theme
@@ -41,6 +42,7 @@ def create_app(
     ensure_dirs()
     service = settings_service or SettingsService()
     effective_settings = (settings or service.load()).model_copy(deep=True)
+    set_language(effective_settings.ui.language)
     if no_ai:
         effective_settings.ai.enabled = False
     existing = QApplication.instance()
@@ -49,7 +51,7 @@ def create_app(
     elif isinstance(existing, QApplication):
         app = existing
     else:
-        raise RuntimeError("Existe una instancia Qt que no es QApplication.")
+        raise RuntimeError(t("error.qt_instance"))
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
     app.setApplicationVersion(__version__)

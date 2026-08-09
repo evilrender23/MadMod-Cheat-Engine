@@ -100,6 +100,13 @@ truco. **Activar** congela el valor o escribe el valor activado; **Desactivar** 
 el valor desactivado. Las activaciones que escriben memoria muestran la confirmación exacta y
 nunca amplían un adjunto de sólo lectura.
 
+## Idioma de la interfaz
+
+En `Ajustes → Interfaz → Idioma` puede seleccionar **Español** o **English**. La selección se
+guarda en `%APPDATA%\M@D-Engine\settings.json` y, al reiniciar, se aplica a toda la interfaz,
+Memory Lab, la ayuda de línea de comandos, los errores y el asistente de IA.
+
+
 
 ## Configuración del proveedor de IA
 
@@ -188,6 +195,14 @@ No incluye escáner inverso de punteros, desensamblador ni “find what accesses
 ## Alcance autorizado
 
 Úselo sólo sobre procesos propios o para los que tenga autorización explícita. El usuario elige el proceso y el nivel de acceso; M@D-Engine bloquea procesos críticos conocidos, oculta procesos sensibles por defecto y mantiene confirmaciones y auditoría local. Consulte [SECURITY.md](SECURITY.md).
+
+## Licencia
+
+El código se publica bajo la **M@D-Engine No-Sale Source License 1.0**. Se permite usarlo,
+estudiarlo, modificarlo y redistribuirlo gratuitamente conservando los avisos y la misma licencia.
+No se permite venderlo, ofrecerlo como producto o descarga de pago ni cobrar por un derivado que
+contenga una parte sustancial del código sin permiso previo y escrito del titular. Consulte
+[LICENSE](LICENSE) para los términos completos.
 
 ## Demostración paso a paso
 

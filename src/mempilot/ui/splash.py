@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QPainter, QPixmap
 from PySide6.QtWidgets import QSplashScreen
 
 from mempilot.branding import APP_NAME, LOGO_FILENAME, PRODUCT_NAME, asset_path
+from mempilot.i18n import t
 
 _SPLASH_WIDTH = 520
 _SPLASH_HEIGHT = 520
@@ -19,7 +20,7 @@ def create_splash() -> QSplashScreen:
     canvas.fill(QColor("#080A0D"))
     logo = QPixmap(str(asset_path(LOGO_FILENAME)))
     if logo.isNull():
-        raise RuntimeError("No se pudo cargar el logo de Mad Mod Engine.")
+        raise RuntimeError(t("error.logo_load"))
     scaled_logo = logo.scaled(
         _LOGO_SIZE,
         _LOGO_SIZE,

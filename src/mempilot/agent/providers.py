@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from mempilot.config.settings import AISettings, CLIBackend
 from mempilot.core.exceptions import ProviderError
+from mempilot.i18n import Language, get_language, t
 
 _MAX_TOOL_CALLS = 32
 _MAX_ANTIGRAVITY_PROMPT_CHARS = 24_000
@@ -80,7 +81,7 @@ class CLIProvider:
 
     def __init__(self, executable: str, settings: AISettings) -> None:
         if not executable:
-            raise ValueError("La ruta del ejecutable CLI no puede estar vacía.")
+            raise ValueError(t("provider.executable_required"))
         self._executable = executable
         self._settings = settings.model_copy(deep=True)
         self.name = _PROVIDER_NAMES[settings.provider]
@@ -105,13 +106,19 @@ class CLIProvider:
                 arguments = json.loads(requested.arguments_json)
             except json.JSONDecodeError:
                 raise ProviderError(
-                    f"{self.name} devolvió argumentos JSON inválidos para "
-                    f"{requested.name!r}. Inténtalo de nuevo."
+                    t(
+                        "provider.invalid_json_args",
+                        provider=self.name,
+                        tool=repr(requested.name),
+                    )
                 ) from None
             if not isinstance(arguments, dict):
                 raise ProviderError(
-                    f"{self.name} devolvió argumentos no estructurados para "
-                    f"{requested.name!r}. Inténtalo de nuevo."
+                    t(
+                        "provider.unstructured_args",
+                        provider=self.name,
+                        tool=repr(requested.name),
+                    )
                 )
             calls.append(
                 ToolCall(
@@ -150,21 +157,26 @@ class CLIProvider:
                 )
         except subprocess.TimeoutExpired:
             raise ProviderError(
-                f"{self.name} no respondió en {self._settings.timeout_s:g} s. "
-                "Aumenta el tiempo de espera en Ajustes → IA."
+                t(
+                    "provider.timeout",
+                    provider=self.name,
+                    seconds=f"{self._settings.timeout_s:g}",
+                )
             ) from None
         except OSError:
-            raise ProviderError(
-                f"No se pudo iniciar {self.name}. Comprueba la ruta en Ajustes → IA."
-            ) from None
+            raise ProviderError(t("provider.start_failed", provider=self.name)) from None
         if completed.returncode != 0:
             hint = _failure_hint(self._settings.provider, completed.stderr)
-            raise ProviderError(f"{self.name} terminó con el código {completed.returncode}. {hint}")
-        if not completed.stdout.strip():
             raise ProviderError(
-                f"{self.name} no produjo una respuesta. Comprueba que la sesión esté iniciada "
-                "y que el modelo seleccionado admita salida estructurada."
+                t(
+                    "provider.exit_code",
+                    provider=self.name,
+                    code=completed.returncode,
+                    hint=hint,
+                )
             )
+        if not completed.stdout.strip():
+            raise ProviderError(t("provider.empty_response", provider=self.name))
         return completed.stdout
 
     def _command(
@@ -279,16 +291,33 @@ def _render_prompt(
         "conversation": input_items,
         "available_tools": tools,
     }
+    if get_language() is Language.ENGLISH:
+        adapter_rules = (
+            "CLI ADAPTER RULES:\n"
+            "You are only the decision engine integrated into M@D-Engine. Do not use internal "
+            "CLI tools, execute commands, or read or modify files. The only permitted actions "
+            "are the typed tools in available_tools. Request actions through tool_calls; "
+            "M@D-Engine will validate them, apply its policy, and return results in the next "
+            "turn. Encode arguments_json as a JSON object string. Return final text only when "
+            "you need no further tool.\n\n"
+        )
+        entry_name = "MAD_MOD_ENGINE_INPUT"
+    else:
+        adapter_rules = (
+            "REGLAS DEL ADAPTADOR CLI:\n"
+            "Eres únicamente el motor de decisión integrado en M@D-Engine. No uses herramientas "
+            "internas de la CLI, no ejecutes comandos y no leas ni modifiques archivos. Las únicas "
+            "acciones permitidas son las herramientas tipadas de available_tools. Para solicitar "
+            "acciones, devuelve tool_calls; M@D-Engine las validará, aplicará su política y "
+            "devolverá los resultados en el turno siguiente. Usa arguments_json con un objeto "
+            "JSON codificado como texto. Devuelve texto final sólo cuando no necesites otra "
+            "herramienta.\n\n"
+        )
+        entry_name = "ENTRADA_MAD_MOD_ENGINE"
     return (
         f"{instructions.strip()}\n\n"
-        "REGLAS DEL ADAPTADOR CLI:\n"
-        "Eres únicamente el motor de decisión integrado en M@D-Engine. No uses herramientas "
-        "internas de la CLI, no ejecutes comandos y no leas ni modifiques archivos. Las únicas "
-        "acciones permitidas son las herramientas tipadas de available_tools. Para solicitar "
-        "acciones, devuelve tool_calls; M@D-Engine las validará, aplicará su política y devolverá "
-        "los resultados en el turno siguiente. Usa arguments_json con un objeto JSON codificado "
-        "como texto. Devuelve texto final sólo cuando no necesites otra herramienta.\n\n"
-        f"ENTRADA_MAD_MOD_ENGINE={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
+        f"{adapter_rules}"
+        f"{entry_name}={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
     )
 
 
@@ -308,7 +337,10 @@ def _bounded_antigravity_prompt(
     notice = {
         "role": "system",
         "content": (
-            "M@D-Engine compactó contexto antiguo para respetar el límite de Antigravity. "
+            "M@D-Engine compacted older context to stay within the Antigravity limit. "
+            "The latest process state is authoritative."
+            if get_language() is Language.ENGLISH
+            else "M@D-Engine compactó contexto antiguo para respetar el límite de Antigravity. "
             "El estado de proceso más reciente es autoritativo."
         ),
     }
@@ -333,10 +365,7 @@ def _bounded_antigravity_prompt(
             break
         turn.pop(removable)
 
-    raise ProviderError(
-        "La petición actual es demasiado grande para Antigravity CLI. "
-        "Usa un mensaje más breve o solicita menos resultados."
-    )
+    raise ProviderError(t("provider.request_too_large"))
 
 
 def _semantic_replay(items: list[Any]) -> list[Any]:
@@ -358,16 +387,22 @@ def _semantic_replay(items: list[Any]) -> list[Any]:
             if isinstance(result, str):
                 with suppress(json.JSONDecodeError):
                     result = json.loads(result)
+            english = get_language() is Language.ENGLISH
+            tool_name = (
+                call.get("name", "unknown" if english else "desconocida")
+                if call is not None
+                else ("unknown" if english else "desconocida")
+            )
             events.append(
                 {
                     "role": "assistant",
                     "content": json.dumps(
                         {
-                            "herramienta": call.get("name", "desconocida")
-                            if call is not None
-                            else "desconocida",
-                            "argumentos": call.get("arguments", "{}") if call is not None else "{}",
-                            "resultado": result,
+                            ("tool" if english else "herramienta"): tool_name,
+                            ("arguments" if english else "argumentos"): (
+                                call.get("arguments", "{}") if call is not None else "{}"
+                            ),
+                            ("result" if english else "resultado"): result,
                         },
                         ensure_ascii=False,
                         separators=(",", ":"),
@@ -436,8 +471,7 @@ def _parse_envelope(provider: CLIBackend, raw: str) -> _CLIEnvelope:
         return _CLIEnvelope.model_validate(document)
     except (KeyError, TypeError, ValueError, json.JSONDecodeError, ValidationError):
         raise ProviderError(
-            f"{_PROVIDER_NAMES[provider]} devolvió una respuesta incompatible. "
-            "Comprueba el modelo seleccionado e inténtalo de nuevo."
+            t("provider.incompatible_response", provider=_PROVIDER_NAMES[provider])
         ) from None
 
 
@@ -453,8 +487,8 @@ def _clean_environment() -> dict[str, str]:
 def _failure_hint(provider: CLIBackend, stderr: str) -> str:
     lowered = stderr.casefold()
     if any(marker in lowered for marker in ("login", "auth", "credential", "unauthorized")):
-        return f"Inicia sesión directamente con «{provider.value}» y vuelve a intentarlo."
-    return "Comprueba la instalación, la sesión iniciada y el modelo en Ajustes → IA."
+        return t("provider.login_hint", provider=provider.value)
+    return t("provider.failure_hint")
 
 
 class ScriptedProvider:
@@ -476,10 +510,7 @@ class ScriptedProvider:
         """Return the next programmed turn and retain a shallow request snapshot."""
         self.requests.append((instructions, list(input_items), list(tools)))
         if self._index >= len(self._turns):
-            raise ProviderError(
-                "El proveedor de prueba agotó los turnos programados. "
-                "Añade otro ProviderTurn al guion."
-            )
+            raise ProviderError(t("provider.script_exhausted"))
         turn = self._turns[self._index]
         self._index += 1
         return turn

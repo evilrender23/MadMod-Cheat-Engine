@@ -10,6 +10,7 @@ from mempilot.core.backend import MemoryBackend
 from mempilot.core.data_types import encode_value
 from mempilot.core.exceptions import MemPilotError
 from mempilot.core.watcher import WatchEntry
+from mempilot.i18n import t
 
 MAX_FREEZE_WRITES_PER_TICK = 32
 
@@ -57,7 +58,7 @@ class FreezeController:
         max_writes_per_tick: int = MAX_FREEZE_WRITES_PER_TICK,
     ) -> None:
         if max_writes_per_tick < 1:
-            raise ValueError("El límite de escrituras por tick debe ser positivo.")
+            raise ValueError(t("freezer.limit_positive"))
         self._backend = backend
         self._audit = audit
         self._max_writes = max_writes_per_tick
@@ -71,7 +72,7 @@ class FreezeController:
     def desired_bytes(self, entry: WatchEntry) -> bytes:
         """Encode and cache a watch's desired value."""
         if entry.desired_value is None:
-            raise ValueError("La vigilancia congelada no tiene un valor deseado.")
+            raise ValueError(t("watch.frozen_value_missing"))
         key = (entry.data_type, entry.desired_value)
         encoded = self._encoded_cache.get(key)
         if encoded is None:
@@ -104,8 +105,12 @@ class FreezeController:
                 written = self._backend.write(target.address, desired)
                 if written != len(desired):
                     raise OSError(
-                        f"Escritura parcial: {written} de {len(desired)} bytes "
-                        f"en 0x{target.address:016X}."
+                        t(
+                            "watch.partial_write_detail",
+                            written=written,
+                            expected=len(desired),
+                            address=f"0x{target.address:016X}",
+                        )
                     )
             except Exception as exc:
                 result.errors[entry.id] = str(exc)

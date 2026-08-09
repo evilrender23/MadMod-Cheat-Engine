@@ -63,6 +63,7 @@ from mempilot.core.scanner import (
     UnknownSnapshot,
 )
 from mempilot.core.watcher import WatchEntry, WatchSpec, WatchTable, resolve_watch_address
+from mempilot.i18n import t
 from mempilot.services.audit_service import AuditService
 from mempilot.services.trainer_service import (
     TrainerService,
@@ -222,20 +223,15 @@ class AppController(QObject):
         identity = self._identity_for_pid(pid)
         bound = self._agent_policy.bound_identity
         if actor is Actor.AGENT and bound is not None and not identity.matches(bound):
-            raise PolicyDenied(
-                "El agente está vinculado a otro proceso. "
-                "Pide al usuario que seleccione el proceso."
-            )
+            raise PolicyDenied(t("error.agent_bound_process"))
         if self._backend.is_open:
-            self._detach_internal("Se cambió el proceso adjunto.", actor)
+            self._detach_internal(t("status.process_changed"), actor)
         mode = AccessMode.READ_WRITE if write_access else AccessMode.READ
         self._backend.open(identity, mode)
         opened_identity = self._backend.identity
         if opened_identity is None or not opened_identity.matches(identity):
             self._backend.close()
-            raise ProcessExitedError(
-                "El proceso cambió mientras se abría. Actualiza la lista y vuelve a intentarlo."
-            )
+            raise ProcessExitedError(t("error.process_changed_during_attach"))
         self._known_identities[identity.pid] = identity
         self._agent_policy.bound_identity = identity
         self._session = None
@@ -302,13 +298,11 @@ class AppController(QObject):
         self._ensure_no_active_scan()
         session = self._session
         if session is None or session.result is None or session.state is not SessionState.READY:
-            raise ScanError(
-                "No hay un escaneo listo para refinar. Ejecuta primero un escaneo inicial."
-            )
+            raise ScanError(t("error.no_scan_ready"))
         if not session.identity.matches(identity):
-            raise ScanError("La sesión pertenece a otro proceso. Inicia un nuevo escaneo.")
+            raise ScanError(t("error.scan_session_process"))
         if request.data_type is not session.data_type:
-            raise ScanError("El tipo del refinamiento debe coincidir con el escaneo inicial.")
+            raise ScanError(t("error.refine_type"))
         session.state = SessionState.SCANNING
         self._last_progress = None
         self._active_scan_request = request
@@ -333,7 +327,7 @@ class AppController(QObject):
         """Discard the current scan session while keeping the process attached."""
         self._require_attached(Actor.USER)
         if self._session is not None and self._session.state is SessionState.SCANNING:
-            raise ScanError("Cancela el escaneo en curso antes de reiniciar la sesión.")
+            raise ScanError(t("error.reset_while_scanning"))
         self._session = None
         self._last_progress = None
         self._active_scan_request = None
@@ -383,18 +377,18 @@ class AppController(QObject):
     def read_address(self, address: int, data_type: DataType) -> str:
         self._require_attached(Actor.USER)
         if address < 0:
-            raise InvalidAddressError("La dirección no puede ser negativa.")
+            raise InvalidAddressError(t("address.negative"))
         return decode_value(data_type, self._backend.read(address, self._read_size(data_type)))
 
     def write_address(self, address: int, data_type: DataType, value: str, actor: Actor) -> None:
         identity = self._require_attached(actor)
         if address < 0:
-            raise InvalidAddressError("La dirección no puede ser negativa.")
+            raise InvalidAddressError(t("address.negative"))
         encoded = encode_value(data_type, value)
         written = self._backend.write(address, encoded)
         if written != len(encoded):
             raise InvalidAddressError(
-                f"Solo se escribieron {written} de {len(encoded)} bytes. Actualiza la dirección."
+                t("error.partial_write", written=written, expected=len(encoded))
             )
         self._audit.record(
             actor.value,
@@ -409,7 +403,7 @@ class AppController(QObject):
         preview = WatchEntry.from_spec(spec)
         address, error = resolve_watch_address(preview, self._backend, self._safe_modules())
         if address is None:
-            raise InvalidAddressError(error or "No se pudo resolver la dirección de vigilancia.")
+            raise InvalidAddressError(error or t("watch.resolve_failed"))
         entry = self._watches.add(spec)
         if entry.chain is not None:
             self._pointer_chains[entry.chain.id] = entry.chain
@@ -431,7 +425,7 @@ class AppController(QObject):
         entry = self._watches.get(watch_id)
         address, error = resolve_watch_address(entry, self._backend, self._safe_modules())
         if address is None:
-            raise InvalidAddressError(error or "No se pudo resolver la vigilancia.")
+            raise InvalidAddressError(error or t("watch.resolve_failed"))
         return address
 
     def update_watch(
@@ -490,11 +484,11 @@ class AppController(QObject):
         entry = self._watches.get(watch_id)
         address, error = resolve_watch_address(entry, self._backend, self._safe_modules())
         if address is None:
-            raise InvalidAddressError(error or "No se pudo resolver la vigilancia.")
+            raise InvalidAddressError(error or t("watch.resolve_failed"))
         encoded = encode_value(entry.data_type, value)
         written = self._backend.write(address, encoded)
         if written != len(encoded):
-            raise InvalidAddressError("La escritura de la vigilancia quedó incompleta.")
+            raise InvalidAddressError(t("error.watch_partial_write"))
         self._watches.set_written_value(watch_id, value)
         self._audit.record(
             actor.value,
@@ -527,7 +521,7 @@ class AppController(QObject):
         desired = value if value is not None else entry.desired_value
         if frozen:
             if desired is None:
-                raise ValueError("Indica un valor deseado antes de congelar la vigilancia.")
+                raise ValueError(t("watch.freeze_value_required"))
             encode_value(entry.data_type, desired)
         updated = self._watches.set_freeze(
             watch_id, frozen=frozen, desired_value=desired, interval_ms=interval_ms
@@ -572,12 +566,9 @@ class AppController(QObject):
             encode_value(entry.data_type, disabled_value)
         address, error = resolve_watch_address(entry, self._backend, self._safe_modules())
         if address is None:
-            raise InvalidAddressError(error or "No se pudo resolver la vigilancia.")
+            raise InvalidAddressError(error or t("watch.resolve_failed"))
         if self._backend.read(address, len(enabled)) != enabled:
-            raise TrainerError(
-                "El valor actual ya no coincide con el valor activado. "
-                "Prueba de nuevo el truco antes de guardarlo."
-            )
+            raise TrainerError(t("trainer.current_value_mismatch"))
         portable = entry
         if entry.address is not None:
             module_location = address_to_module_offset(entry.address, self._safe_modules())
@@ -629,7 +620,7 @@ class AppController(QObject):
         identity = self._require_attached(actor)
         current = self._trainer_service.find(identity, trick_id)
         if self._trick_is_active(current):
-            raise TrainerError("Desactiva el truco antes de editar sus valores.")
+            raise TrainerError(t("trainer.deactivate_before_edit"))
         encode_value(current.data_type, enabled_value)
         if disabled_value is not None:
             encode_value(current.data_type, disabled_value)
@@ -666,7 +657,7 @@ class AppController(QObject):
         preview = WatchEntry.from_spec(trick.watch_spec())
         address, error = resolve_watch_address(preview, self._backend, self._safe_modules())
         if address is None:
-            raise InvalidAddressError(error or "No se pudo resolver la dirección del truco.")
+            raise InvalidAddressError(error or t("error.trainer_resolve"))
         return address
 
     def set_trainer_trick_active(
@@ -699,7 +690,7 @@ class AppController(QObject):
                 )
             else:
                 if trick.disabled_value is None:
-                    raise TrainerError("El truco no tiene un valor para desactivarlo.")
+                    raise TrainerError(t("trainer.disabled_value_missing"))
                 self.set_watch_value(watch.id, trick.disabled_value, actor)
             self._active_tricks.discard(trick.id)
         self._audit.record(
@@ -773,13 +764,14 @@ class AppController(QObject):
         workspace = load_workspace(path)
         if workspace.process_name.casefold() != identity.name.casefold():
             raise WorkspaceError(
-                f"El workspace pertenece a {workspace.process_name!r}; "
-                f"el proceso adjunto es {identity.name!r}."
+                t(
+                    "workspace.wrong_process",
+                    workspace_process=repr(workspace.process_name),
+                    attached_process=repr(identity.name),
+                )
             )
         if workspace.architecture is not identity.architecture:
-            raise WorkspaceError(
-                "La arquitectura del workspace no coincide con el proceso adjunto."
-            )
+            raise WorkspaceError(t("workspace.architecture_mismatch"))
         restored = WatchTable.from_models(workspace.watches, workspace.pointer_chains)
         self._watches.replace_all(restored.entries())
         self._pointer_chains = {chain.id: chain for chain in workspace.pointer_chains}
@@ -801,7 +793,7 @@ class AppController(QObject):
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             if process.poll() is not None:
-                raise MemPilotError("Memory Lab terminó antes de mostrar su ventana.")
+                raise MemPilotError(t("error.lab_exited"))
             try:
                 children = psutil.Process(process.pid).children(recursive=True)
             except psutil.Error:
@@ -815,7 +807,7 @@ class AppController(QObject):
                 return int(process.pid)
             time.sleep(0.05)
         process.terminate()
-        raise MemPilotError("Memory Lab no mostró una ventana dentro de 10 segundos.")
+        raise MemPilotError(t("error.lab_window_timeout"))
 
     def start_agent_job(
         self,
@@ -826,7 +818,7 @@ class AppController(QObject):
         tool_timeout_s: float | None = None,
     ) -> QThread:
         if self._agent_thread is not None and self._agent_thread.isRunning():
-            raise RuntimeError("Ya hay una operación del agente en curso.")
+            raise RuntimeError(t("error.agent_busy"))
         cancel = threading.Event()
         worker = AgentWorker(
             job,
@@ -865,10 +857,8 @@ class AppController(QObject):
         if not self._backend.is_alive():
             pid = identity.pid
             self.process_lost.emit(pid)
-            self._detach_internal("El proceso terminó y M@D-Engine se desacopló.", Actor.USER)
-            raise ProcessExitedError(
-                f"El proceso PID {pid} terminó. Selecciona otro proceso para continuar."
-            )
+            self._detach_internal(t("status.process_detached_on_exit"), Actor.USER)
+            raise ProcessExitedError(t("error.pid_exited", pid=pid))
         if actor is Actor.AGENT:
             self._require_agent_identity(identity)
         return identity
@@ -876,10 +866,7 @@ class AppController(QObject):
     def _require_agent_identity(self, identity: ProcessIdentity | None) -> None:
         bound = self._agent_policy.bound_identity
         if identity is None or bound is None or not identity.matches(bound):
-            raise PolicyDenied(
-                "El proceso adjunto no coincide con la identidad autorizada para el agente. "
-                "Pide al usuario que vuelva a seleccionarlo."
-            )
+            raise PolicyDenied(t("error.agent_identity_mismatch"))
 
     def _identity_for_pid(self, pid: int) -> ProcessIdentity:
         known = self._known_identities.get(pid)
@@ -927,7 +914,7 @@ class AppController(QObject):
 
     def _ensure_no_active_scan(self) -> None:
         if self._scan_thread is not None and self._scan_thread.isRunning():
-            raise ScanError("Ya hay un escaneo en curso. Cancélalo antes de iniciar otro.")
+            raise ScanError(t("error.scan_busy"))
 
     @Slot(object)
     def _on_scan_progress(self, progress: object) -> None:
@@ -944,9 +931,7 @@ class AppController(QObject):
             return
         if self._scan_is_refinement:
             if not isinstance(payload.result, CandidateSet):
-                self._on_scan_failed(
-                    ScanError("El refinamiento devolvió un resultado incompatible.")
-                )
+                self._on_scan_failed(ScanError(t("error.refine_incompatible")))
                 return
             session.set_refined_result(payload.result, request, duration_s=payload.duration_s)
         else:
@@ -977,7 +962,7 @@ class AppController(QObject):
         _LOG.error("Scan worker failed", exc_info=(type(exc), exc, exc.__traceback__))
         message = exc.user_message() if isinstance(exc, MemPilotError) else str(exc)
         if not message:
-            message = "El escaneo falló. Revisa el proceso y vuelve a intentarlo."
+            message = t("status.failed")
         if self._session is not None:
             self._session.state, self._session.error = SessionState.ERROR, message
         self._audit.record("system", "scan_error", "scan", message, "error")
@@ -1057,7 +1042,7 @@ class AppController(QObject):
         identity = self._backend.identity
         if identity is not None:
             self.process_lost.emit(identity.pid)
-            self._detach_internal("El proceso terminó y M@D-Engine se desacopló.", Actor.USER)
+            self._detach_internal(t("status.process_detached_on_exit"), Actor.USER)
 
     @Slot(str)
     def _on_watch_write_error(self, message: str) -> None:

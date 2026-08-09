@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from mempilot.core.data_types import DataType
 from mempilot.core.scanner import ScanMode
+from mempilot.i18n import t
 from mempilot.services.trainer_service import TrickMode
 
 _PROHIBITED_SCHEMA_KEYWORDS = frozenset(
@@ -36,7 +37,7 @@ def strict_schema(model: type[BaseModel]) -> dict[str, Any]:
             prohibited = _PROHIBITED_SCHEMA_KEYWORDS.intersection(node)
             if prohibited:
                 names = ", ".join(sorted(prohibited))
-                raise ValueError(f"El esquema usa palabras clave no admitidas: {names}.")
+                raise ValueError(t("schema.unsupported", keywords=names))
             node.pop("default", None)
             node.pop("title", None)
             properties = node.get("properties")

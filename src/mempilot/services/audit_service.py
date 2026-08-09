@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from PySide6.QtCore import QObject, Signal
 
 from mempilot.config.paths import AUDIT_FILE
+from mempilot.i18n import t
 from mempilot.logging_setup import redact_secrets
 
 AUDIT_ROTATION_BYTES = 5_000_000
@@ -85,7 +86,7 @@ class AuditService(QObject):
     ) -> AuditRecord | None:
         """Aggregate freeze ticks and append at most one heartbeat every five seconds."""
         if count < 0:
-            raise ValueError("El número de escrituras no puede ser negativo")
+            raise ValueError(t("audit.write_count_nonnegative"))
         with self._lock:
             now = self._clock()
             if count:

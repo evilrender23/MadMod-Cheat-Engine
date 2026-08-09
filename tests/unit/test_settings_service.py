@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from mempilot.config.settings import Settings
+from mempilot.i18n import Language
 from mempilot.services.settings_service import SettingsService
 
 
@@ -77,6 +78,24 @@ def test_settings_round_trip_never_serializes_credentials(tmp_path: Path) -> Non
     assert "api_key" not in raw
     assert "sk-" not in raw
     assert not (tmp_path / "settings.json.tmp").exists()
+
+
+def test_interface_language_round_trips_and_old_settings_default_to_spanish(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "settings.json"
+    service = SettingsService(path)
+    settings = Settings()
+    settings.ui.language = Language.ENGLISH
+    service.save(settings)
+
+    assert service.load().ui.language is Language.ENGLISH
+
+    path.write_text(
+        '{"schema_version":2,"scan":{},"ui":{},"ai":{}}',
+        encoding="utf-8",
+    )
+    assert service.load().ui.language is Language.SPANISH
 
 
 def test_settings_reject_unknown_fields() -> None:

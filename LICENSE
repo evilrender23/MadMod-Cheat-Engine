@@ -1,16 +1,36 @@
-MIT License
+M@D-Engine No-Sale Source License 1.0
 
-Copyright (c) 2026 MemPilot contributors
+Copyright (c) 2026 M@D-Engine copyright holders
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is granted to any person obtaining a copy of this software and its
+associated source code and documentation (the "Software") to use, study, copy,
+modify, and redistribute the Software, subject to all of the following terms:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. ATTRIBUTION. This license, the copyright notice above, and all existing
+   attribution notices must be included with every copy or substantial portion
+   of the Software.
+
+2. NO SALE WITHOUT PERMISSION. You may not, without prior written permission
+   from the copyright holder, sell, license for a fee, rent, lease, offer as a
+   paid download or paid product, or otherwise charge for the Software or any
+   derivative work that contains all or a substantial portion of the Software's
+   source code.
+
+3. FREE REDISTRIBUTION. Redistribution at no charge is permitted only under
+   this same license. You may not grant recipients fewer rights than this
+   license grants or remove this restriction.
+
+4. SEPARATE COMMERCIAL PERMISSION. The copyright holder may grant written
+   commercial permission under separate terms. Permission must be obtained
+   before any sale or other activity prohibited by Section 2.
+
+5. CONTRIBUTIONS. Unless explicitly agreed otherwise in writing, contributions
+   submitted to this repository may be incorporated and distributed under this
+   license.
+
+6. TERMINATION. Any violation of these terms automatically terminates the
+   permissions granted by this license. Continued possession or distribution
+   after termination is not authorized.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

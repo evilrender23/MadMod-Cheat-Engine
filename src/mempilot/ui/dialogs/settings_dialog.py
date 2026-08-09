@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from mempilot.agent.providers import find_cli_executable
 from mempilot.config.settings import CLIBackend, Settings
-from mempilot.i18n import t
+from mempilot.i18n import Language, t
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
 from mempilot.ui.theme import SPACE_2, SPACE_3
@@ -86,6 +86,16 @@ class SettingsDialog(QDialog):
     def _ui_tab(self) -> QWidget:
         page = QWidget(self)
         form = QFormLayout(page)
+        self.language_combo = QComboBox(page)
+        self.language_combo.setAccessibleName(t("settings.language"))
+        for language in Language:
+            self.language_combo.addItem(
+                t(f"settings.language.{language.value}"),
+                language.value,
+            )
+        language_index = self.language_combo.findData(self.settings.ui.language.value)
+        self.language_combo.setCurrentIndex(max(0, language_index))
+        form.addRow(t("settings.language"), self.language_combo)
         self.page_size = QSpinBox(page)
         self.page_size.setAccessibleName(t("settings.results_page_size"))
         self.page_size.setRange(1, 100_000)
@@ -176,6 +186,7 @@ class SettingsDialog(QDialog):
         updated.ui.results_refresh_ms = self.results_refresh.value()
         updated.ui.watch_refresh_ms = self.watch_refresh.value()
         updated.ui.show_system_processes = self.show_system.isChecked()
+        updated.ui.language = Language(str(self.language_combo.currentData()))
         updated.ai.enabled = self.ai_enabled.isChecked()
         updated.ai.provider = CLIBackend(str(self.provider_combo.currentData()))
         updated.ai.executable = self.executable_edit.text().strip() or None
