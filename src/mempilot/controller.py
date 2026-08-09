@@ -617,6 +617,48 @@ class AppController(QObject):
         self.trainers_changed.emit()
         return trick
 
+    def update_trainer_trick_values(
+        self,
+        trick_id: str,
+        *,
+        enabled_value: str,
+        disabled_value: str | None,
+        actor: Actor,
+    ) -> TrainerTrick:
+        """Persist manually edited values for an inactive saved trick."""
+        identity = self._require_attached(actor)
+        current = self._trainer_service.find(identity, trick_id)
+        if self._trick_is_active(current):
+            raise TrainerError("Desactiva el truco antes de editar sus valores.")
+        encode_value(current.data_type, enabled_value)
+        if disabled_value is not None:
+            encode_value(current.data_type, disabled_value)
+        updated = self._trainer_service.update_trick_values(
+            identity,
+            trick_id,
+            enabled_value=enabled_value,
+            disabled_value=disabled_value,
+        )
+        runtime_watch_id = self._trainer_watch_ids.get(trick_id)
+        if runtime_watch_id is not None:
+            self.update_watch(
+                runtime_watch_id,
+                desired_value=updated.enabled_value,
+                actor=actor,
+            )
+        self._audit.record(
+            actor.value,
+            "trainer_trick_values_update",
+            trick_id,
+            (
+                f"pid={identity.pid}; proceso={identity.name}; "
+                f"truco={updated.name}; valor_activado={updated.enabled_value}"
+            ),
+            "ok",
+        )
+        self.trainers_changed.emit()
+        return updated
+
     def trainer_trick_address(self, trick_id: str, actor: Actor = Actor.USER) -> int:
         """Resolve one saved trick without changing memory or the watch table."""
         identity = self._require_attached(actor)

@@ -190,6 +190,40 @@ class TrainerService:
         self._save(catalog, self.catalog_path(identity.name))
         return trick
 
+    def update_trick_values(
+        self,
+        identity: ProcessIdentity,
+        trick_id: str,
+        *,
+        enabled_value: str,
+        disabled_value: str | None,
+    ) -> TrainerTrick:
+        """Persist user-edited activation values without changing the address contract."""
+        catalog = self.load(identity)
+        index = next(
+            (index for index, item in enumerate(catalog.tricks) if item.id == trick_id),
+            None,
+        )
+        if index is None:
+            raise TrainerError(f"No existe el truco guardado {trick_id}.")
+        original = catalog.tricks[index]
+        try:
+            updated = TrainerTrick.model_validate(
+                {
+                    **original.model_dump(),
+                    "enabled_value": enabled_value,
+                    "disabled_value": disabled_value,
+                }
+            )
+        except ValidationError as exc:
+            raise TrainerError(
+                "Los valores del truco no son válidos. Revisa el valor activado y desactivado."
+            ) from exc
+        catalog.tricks[index] = updated
+        catalog.updated_at = datetime.now(UTC)
+        self._save(catalog, self.catalog_path(identity.name))
+        return updated
+
     def find(self, identity: ProcessIdentity, trick_id: str) -> TrainerTrick:
         """Return one exact trick from the attached process catalog."""
         trick = next((item for item in self.load(identity).tricks if item.id == trick_id), None)

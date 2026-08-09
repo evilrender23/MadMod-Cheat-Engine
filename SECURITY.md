@@ -31,11 +31,14 @@ ya no coincide con el que el usuario probó. El catálogo se limita al nombre y 
 proceso, dirección portable, tipo, valores de activación y desactivación y notas; excluye PID,
 handles, lecturas actuales, estado congelado y credenciales.
 
-Los trainers se cargan inactivos en cada nuevo adjunto. Activar o desactivar vuelve a pasar por
-`AppController`, el handle actual, la identidad adjunta, la política y la auditoría. El overlay
-deshabilita esas acciones en sólo lectura y confirma cualquier activación o restauración que
-escriba memoria. Un trainer de congelado se desactiva descongelando; uno de escritura restaura
-obligatoriamente el valor desactivado guardado.
+Los trainers se cargan inactivos en cada nuevo adjunto. También pueden crearse sin IA desde una
+vigilancia: si el valor elegido difiere del actual, la GUI muestra una confirmación exacta antes de
+probarlo y guardarlo. Los valores de un trainer guardado sólo se pueden editar desde el overlay
+mientras esté inactivo. Activar o desactivar vuelve a pasar por `AppController`, el handle actual,
+la identidad adjunta, la política y la auditoría. El overlay deshabilita esas acciones en sólo
+lectura y confirma cualquier activación o restauración que escriba memoria. Un trainer de
+congelado se desactiva descongelando; uno de escritura restaura obligatoriamente el valor
+desactivado guardado.
 
 ## Modo autónomo
 

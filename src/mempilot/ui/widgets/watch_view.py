@@ -148,6 +148,7 @@ class WatchView(QWidget):
 
     workspace_saved = Signal(object)
     workspace_loaded = Signal(object)
+    trainer_create_requested = Signal(str)
 
     def __init__(self, controller: AppController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -180,6 +181,9 @@ class WatchView(QWidget):
         self.add_pointer_button = QPushButton(t("watch.action.add_pointer"), self)
         self.add_pointer_button.setAccessibleName(t("watch.accessible.add_pointer"))
         self.add_pointer_button.clicked.connect(self._add_pointer)
+        self.create_trainer_button = QPushButton(t("watch.action.create_trainer"), self)
+        self.create_trainer_button.setAccessibleName(t("watch.accessible.create_trainer"))
+        self.create_trainer_button.clicked.connect(self._request_trainer)
         self.remove_button = QPushButton(t("watch.action.remove"), self)
         self.remove_button.setAccessibleName(t("watch.accessible.remove"))
         self.remove_button.clicked.connect(self._remove_selected)
@@ -199,6 +203,7 @@ class WatchView(QWidget):
         actions = QHBoxLayout()
         actions.addWidget(self.add_address_button)
         actions.addWidget(self.add_pointer_button)
+        actions.addWidget(self.create_trainer_button)
         actions.addWidget(self.remove_button)
         actions.addWidget(self.freeze_all_button)
         actions.addWidget(self.unfreeze_all_button)
@@ -229,6 +234,12 @@ class WatchView(QWidget):
     @Slot()
     def _add_pointer(self) -> None:
         PointerDialog(self._controller, self).exec()
+
+    @Slot()
+    def _request_trainer(self) -> None:
+        entries = self._selected_entries()
+        if len(entries) == 1:
+            self.trainer_create_requested.emit(entries[0].id)
 
     @Slot()
     def _remove_selected(self) -> None:
@@ -323,7 +334,9 @@ class WatchView(QWidget):
     @Slot(QItemSelection, QItemSelection)
     def _selection_changed(self, selected: QItemSelection, deselected: QItemSelection) -> None:
         del selected, deselected
-        self.remove_button.setEnabled(bool(self._selected_entries()))
+        entries = self._selected_entries()
+        self.remove_button.setEnabled(bool(entries))
+        self.create_trainer_button.setEnabled(len(entries) == 1)
 
     @Slot(str)
     def _show_error(self, message: str) -> None:
@@ -351,6 +364,7 @@ class WatchView(QWidget):
         controls = (
             self.table,
             self.add_address_button,
+            self.create_trainer_button,
             self.add_pointer_button,
             self.remove_button,
             self.freeze_all_button,

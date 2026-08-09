@@ -170,6 +170,51 @@ def test_controller_saves_only_the_tested_value_and_freeze_is_reversible(
         controller.shutdown()
 
 
+def test_controller_updates_inactive_trainer_values_and_rejects_active_edits(
+    tmp_path: Path,
+) -> None:
+    controller, _backend = _controller(tmp_path)
+    try:
+        watch = controller.add_watch(
+            WatchSpec("Multiplicador", DataType.INT32, address=_ADDRESS),
+            Actor.USER,
+        )
+        trick = controller.save_trainer_trick(
+            watch.id,
+            name="Daño configurable",
+            enabled_value="100",
+            disabled_value="25",
+            mode=TrickMode.WRITE_PAIR,
+            interval_ms=100,
+            notes="",
+            actor=Actor.USER,
+        )
+
+        with pytest.raises(TrainerError, match="Desactiva"):
+            controller.update_trainer_trick_values(
+                trick.id,
+                enabled_value="300",
+                disabled_value="50",
+                actor=Actor.USER,
+            )
+
+        controller.set_trainer_trick_active(trick.id, False, Actor.USER)
+        updated = controller.update_trainer_trick_values(
+            trick.id,
+            enabled_value="300",
+            disabled_value="50",
+            actor=Actor.USER,
+        )
+
+        assert updated.enabled_value == "300"
+        assert updated.disabled_value == "50"
+        persisted = controller.list_trainer_tricks()[0].trick
+        assert persisted.enabled_value == "300"
+        assert persisted.disabled_value == "50"
+    finally:
+        controller.shutdown()
+
+
 def test_saved_write_pair_reloads_for_same_executable_and_restores_disabled_value(
     tmp_path: Path,
 ) -> None:

@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QCursor, QHideEvent, QKeyEvent
 from PySide6.QtWidgets import (
     QComboBox,
+    QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -34,6 +35,8 @@ class OverlayWindow(QWidget):
     write_requested = Signal(str, str)
     freeze_requested = Signal(str, str, bool)
     trainer_toggle_requested = Signal(str, bool)
+    trainer_values_save_requested = Signal(str, str, object)
+    trainer_create_requested = Signal(str)
 
     def __init__(self) -> None:
         super().__init__(None)
@@ -140,6 +143,27 @@ class OverlayWindow(QWidget):
         self.trainer_info = QLabel("", trainers)
         self.trainer_info.setWordWrap(True)
         trainer_layout.addWidget(self.trainer_info)
+        trainer_values_form = QFormLayout()
+        self.trainer_enabled_edit = QLineEdit(trainers)
+        self.trainer_enabled_edit.setFont(monospace_font())
+        self.trainer_enabled_edit.setAccessibleName(t("overlay.trainer.enabled_value"))
+        self.trainer_enabled_edit.textChanged.connect(self._update_trainer_buttons)
+        trainer_values_form.addRow(t("overlay.trainer.enabled_value"), self.trainer_enabled_edit)
+        self.trainer_disabled_edit = QLineEdit(trainers)
+        self.trainer_disabled_edit.setFont(monospace_font())
+        self.trainer_disabled_edit.setAccessibleName(t("overlay.trainer.disabled_value"))
+        self.trainer_disabled_edit.textChanged.connect(self._update_trainer_buttons)
+        trainer_values_form.addRow(t("overlay.trainer.disabled_value"), self.trainer_disabled_edit)
+        self.trainer_disabled_label = trainer_values_form.labelForField(self.trainer_disabled_edit)
+        trainer_layout.addLayout(trainer_values_form)
+        self.trainer_edit_hint = QLabel("", trainers)
+        self.trainer_edit_hint.setProperty("tone", "info")
+        self.trainer_edit_hint.setWordWrap(True)
+        trainer_layout.addWidget(self.trainer_edit_hint)
+        self.trainer_save_values_button = QPushButton(t("overlay.trainer.save_values"), trainers)
+        self.trainer_save_values_button.setAccessibleName(t("overlay.trainer.save_values"))
+        self.trainer_save_values_button.clicked.connect(self._request_trainer_values_save)
+        trainer_layout.addWidget(self.trainer_save_values_button)
         self.trainer_toggle_button = QPushButton(t("overlay.trainer.activate"), trainers)
         self.trainer_toggle_button.setAccessibleName(t("overlay.trainer.activate"))
         self.trainer_toggle_button.clicked.connect(self._request_trainer_toggle)
@@ -161,6 +185,10 @@ class OverlayWindow(QWidget):
         self.value_edit.setFont(monospace_font())
         self.value_edit.textChanged.connect(self._update_manual_buttons)
         manual_layout.addWidget(self.value_edit)
+        self.create_trainer_button = QPushButton(t("overlay.trainer.create_manual"), manual)
+        self.create_trainer_button.setAccessibleName(t("overlay.trainer.create_manual"))
+        self.create_trainer_button.clicked.connect(self._request_manual_trainer)
+        manual_layout.addWidget(self.create_trainer_button)
         manual_actions = QHBoxLayout()
         self.write_button = QPushButton(t("overlay.write"), manual)
         self.write_button.setAccessibleName(t("overlay.write"))
@@ -322,6 +350,12 @@ class OverlayWindow(QWidget):
             self.trainer_info.setText(t("overlay.no_trainers", name=process_name))
             self.trainer_toggle_button.setText(t("overlay.trainer.activate"))
             self.trainer_toggle_button.setEnabled(False)
+            self.trainer_enabled_edit.clear()
+            self.trainer_disabled_edit.clear()
+            self.trainer_disabled_edit.setVisible(False)
+            if self.trainer_disabled_label is not None:
+                self.trainer_disabled_label.setVisible(False)
+            self._update_trainer_buttons()
             return
         trick = state.trick
         self.trainer_info.setText(
@@ -332,10 +366,32 @@ class OverlayWindow(QWidget):
                 state=t("overlay.trainer.active" if state.active else "overlay.trainer.inactive"),
             )
         )
+        self.trainer_enabled_edit.setText(trick.enabled_value)
+        self.trainer_disabled_edit.setText(trick.disabled_value or "")
+        write_pair = trick.mode.value == "write_pair"
+        self.trainer_disabled_edit.setVisible(write_pair)
+        if self.trainer_disabled_label is not None:
+            self.trainer_disabled_label.setVisible(write_pair)
         label = t("overlay.trainer.deactivate") if state.active else t("overlay.trainer.activate")
         self.trainer_toggle_button.setText(label)
         self.trainer_toggle_button.setAccessibleName(label)
         self.trainer_toggle_button.setEnabled(self._write_access)
+        self._update_trainer_buttons()
+
+    @Slot()
+    def _update_trainer_buttons(self) -> None:
+        state = self._selected_trainer_trick()
+        editable = self._write_access and state is not None and not state.active
+        self.trainer_enabled_edit.setEnabled(editable)
+        self.trainer_disabled_edit.setEnabled(editable)
+        requires_disabled = bool(state is not None and state.trick.mode.value == "write_pair")
+        has_values = bool(self.trainer_enabled_edit.text().strip()) and (
+            not requires_disabled or bool(self.trainer_disabled_edit.text().strip())
+        )
+        self.trainer_save_values_button.setEnabled(editable and has_values)
+        self.trainer_edit_hint.setText(
+            t("overlay.trainer.edit_inactive") if state is not None and state.active else ""
+        )
 
     @Slot()
     def _update_manual_buttons(self) -> None:
@@ -344,6 +400,7 @@ class OverlayWindow(QWidget):
         writable = self._write_access and entry is not None
         self.write_button.setEnabled(writable and has_value and not bool(entry and entry.frozen))
         self.freeze_button.setEnabled(writable and (bool(entry and entry.frozen) or has_value))
+        self.create_trainer_button.setEnabled(writable)
         if entry is not None and not self._write_access:
             self.operation_status.setText(t("overlay.read_only"))
 
@@ -367,6 +424,26 @@ class OverlayWindow(QWidget):
         state = self._selected_trainer_trick()
         if state is not None and self._write_access:
             self.trainer_toggle_requested.emit(state.trick.id, not state.active)
+
+    @Slot()
+    def _request_trainer_values_save(self) -> None:
+        state = self._selected_trainer_trick()
+        if state is None or state.active or not self._write_access:
+            return
+        disabled: str | None = None
+        if state.trick.mode.value == "write_pair":
+            disabled = self.trainer_disabled_edit.text().strip()
+        self.trainer_values_save_requested.emit(
+            state.trick.id,
+            self.trainer_enabled_edit.text().strip(),
+            disabled,
+        )
+
+    @Slot()
+    def _request_manual_trainer(self) -> None:
+        entry = self._selected_watch()
+        if entry is not None and self._write_access:
+            self.trainer_create_requested.emit(entry.id)
 
     @Slot()
     def _confirm_pending(self) -> None:

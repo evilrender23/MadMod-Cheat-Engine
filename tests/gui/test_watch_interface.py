@@ -260,6 +260,11 @@ def test_watch_view_freezes_unfreezes_and_removes_selected_rows(qtbot: QtBot) ->
     )
 
     view.table.selectRow(0)
+    assert view.create_trainer_button.isEnabled()
+    with qtbot.waitSignal(view.trainer_create_requested, timeout=1000) as requested:
+        qtbot.mouseClick(view.create_trainer_button, Qt.MouseButton.LeftButton)
+    assert requested.args == ["watch-1"]
+
     assert view.remove_button.isEnabled()
     qtbot.mouseClick(view.remove_button, Qt.MouseButton.LeftButton)
     assert fake.calls[-1] == ("remove_watch", "watch-1", Actor.USER)

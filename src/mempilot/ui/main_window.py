@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, Qt, Slot
@@ -38,6 +39,7 @@ from mempilot.ui.dialogs.attach_dialog import AttachDialog
 from mempilot.ui.dialogs.confirm_dialog import ConfirmDialog
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
 from mempilot.ui.dialogs.settings_dialog import SettingsDialog
+from mempilot.ui.dialogs.trainer_dialog import TrainerDialog
 from mempilot.ui.hotkeys import GlobalHotkeys, HotkeyEventFilter
 from mempilot.ui.overlay import OverlayWindow
 from mempilot.ui.widgets.chat_panel import AutonomousConsentDialog, ChatPanel
@@ -72,8 +74,11 @@ class MainWindow(QMainWindow):
         self._hotkeys = GlobalHotkeys()
         self._hotkeys_registered = False
         self._hotkey_filter = HotkeyEventFilter(self._hotkeys, self.toggle_overlay)
+        self._native_hotkeys_enabled = (
+            sys.platform == "win32" and QApplication.platformName() == "windows"
+        )
         application = QApplication.instance()
-        if application is not None:
+        if application is not None and self._native_hotkeys_enabled:
             application.installNativeEventFilter(self._hotkey_filter)
         self.setWindowTitle(t("app.name"))
         self.setMinimumSize(1280, 720)
@@ -144,10 +149,13 @@ class MainWindow(QMainWindow):
         self.results_view.error_raised.connect(self.show_error)
         self.watch_view.workspace_saved.connect(self._workspace_saved)
         self.watch_view.workspace_loaded.connect(self._workspace_loaded)
+        self.watch_view.trainer_create_requested.connect(self._create_manual_trainer)
         self.overlay.message_submitted.connect(self._submit_overlay_message)
         self.overlay.write_requested.connect(self._overlay_write_watch)
         self.overlay.freeze_requested.connect(self._overlay_set_freeze)
         self.overlay.trainer_toggle_requested.connect(self._overlay_toggle_trick)
+        self.overlay.trainer_values_save_requested.connect(self._overlay_save_trainer_values)
+        self.overlay.trainer_create_requested.connect(self._create_manual_trainer)
         if self.orchestrator is not None:
             self.chat_panel.message_submitted.connect(self._submit_agent_message)
             self.chat_panel.message_submitted.connect(self._mirror_main_user_in_overlay)
@@ -315,6 +323,101 @@ class MainWindow(QMainWindow):
             self.overlay.set_operation_result(str(exc), error=True)
             return
         self.overlay.refresh_trainer_tricks(states)
+
+    @Slot(str)
+    def _create_manual_trainer(self, watch_id: str) -> None:
+        from_overlay = self.sender() is self.overlay
+        entry = self._watch_entry(watch_id)
+        if entry is None:
+            self._report_manual_trainer_result(t("overlay.no_watches"), from_overlay, True)
+            return
+        if not self._last_write_access:
+            self._report_manual_trainer_result(t("overlay.read_only"), from_overlay, True)
+            return
+        if entry.frozen:
+            self._report_manual_trainer_result(
+                t("trainer.manual.unfreeze_first"), from_overlay, True
+            )
+            return
+        dialog = TrainerDialog(entry, self.overlay if from_overlay else self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        draft = dialog.draft()
+        try:
+            address = self.controller.watch_address(watch_id, Actor.USER)
+            current = self.controller.read_address(address, entry.data_type)
+            confirmation = ConfirmDialog(
+                action=t("trainer.manual.confirm", name=draft.name),
+                address=address,
+                data_type=entry.data_type,
+                current_value=current,
+                new_value=draft.enabled_value,
+                allow_remember=False,
+                parent=self.overlay if from_overlay else self,
+            )
+            if confirmation.exec() != QDialog.DialogCode.Accepted:
+                return
+            if current != draft.enabled_value:
+                self.controller.set_watch_value(
+                    watch_id,
+                    draft.enabled_value,
+                    Actor.USER,
+                )
+            self.controller.save_trainer_trick(
+                watch_id,
+                name=draft.name,
+                enabled_value=draft.enabled_value,
+                disabled_value=draft.disabled_value,
+                mode=draft.mode,
+                interval_ms=draft.interval_ms,
+                notes=draft.notes,
+                actor=Actor.USER,
+            )
+        except Exception as exc:
+            self._report_manual_trainer_result(str(exc), from_overlay, True)
+            return
+        self._report_manual_trainer_result(
+            t("trainer.manual.saved", name=draft.name), from_overlay, False
+        )
+        self._refresh_overlay_watches()
+        self._refresh_overlay_trainers()
+
+    @Slot(str, str, object)
+    def _overlay_save_trainer_values(
+        self,
+        trick_id: str,
+        enabled_value: str,
+        raw_disabled_value: object,
+    ) -> None:
+        if not self._overlay_mutations_allowed():
+            return
+        disabled_value = raw_disabled_value if isinstance(raw_disabled_value, str) else None
+        try:
+            self.controller.update_trainer_trick_values(
+                trick_id,
+                enabled_value=enabled_value,
+                disabled_value=disabled_value,
+                actor=Actor.USER,
+            )
+        except Exception as exc:
+            self.overlay.set_operation_result(str(exc), error=True)
+            return
+        self.overlay.set_operation_result(t("overlay.trainer.values_saved"))
+        self._refresh_overlay_trainers()
+
+    def _report_manual_trainer_result(
+        self,
+        message: str,
+        from_overlay: bool,
+        error: bool,
+    ) -> None:
+        if from_overlay:
+            self.overlay.set_operation_result(message, error=error)
+            return
+        if error:
+            self.show_error(message)
+            return
+        self.status_strip.set_message(message, "success")
 
     @Slot(str, bool)
     def _overlay_toggle_trick(self, trick_id: str, active: bool) -> None:
@@ -763,7 +866,7 @@ class MainWindow(QMainWindow):
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
-        if self._hotkeys_registered:
+        if not self._native_hotkeys_enabled or self._hotkeys_registered:
             return
         failed = self._hotkeys.register(int(self.winId()))
         self._hotkeys_registered = True
@@ -776,7 +879,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         """Persist layout, release hotkeys, and shut down every worker."""
         application = QApplication.instance()
-        if application is not None:
+        if application is not None and self._native_hotkeys_enabled:
             application.removeNativeEventFilter(self._hotkey_filter)
         self._save_layout()
         self._hotkeys.unregister()

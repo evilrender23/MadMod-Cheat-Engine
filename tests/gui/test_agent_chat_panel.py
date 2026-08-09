@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialogButtonBox, QLabel
 from pytestqt.qtbot import QtBot
 from tests.fixtures.fake_backend import FakeMemoryBackend
@@ -68,6 +69,53 @@ def test_trainer_creator_submits_guided_agent_prompt(qtbot: QtBot) -> None:
 
     assert submitted.args == [t("chat.trainer_prompt")]
     assert panel.history[-1] == ("user", t("chat.trainer_prompt"))
+
+
+def test_agent_message_renders_markdown_without_showing_raw_markers(qtbot: QtBot) -> None:
+    panel = ChatPanel(ai_enabled=True)
+    qtbot.addWidget(panel)
+    panel.show()
+
+    panel.add_agent_message(
+        "El guardado falló.\n\n**Paso de recuperación:** escribe `100` y vuelve a probar."
+    )
+
+    body = panel.findChild(QLabel, "chatMessageBody_agent")
+    assert body is not None
+    assert body.textFormat() is Qt.TextFormat.RichText
+    assert "Paso de recuperación:" in body.text()
+    assert "**Paso de recuperación:**" not in body.text()
+    assert "`100`" not in body.text()
+    panel.close()
+    panel.deleteLater()
+    qtbot.wait(1)
+
+
+def test_long_activity_log_stays_collapsed_and_bounded_below_chat(qtbot: QtBot) -> None:
+    panel = ChatPanel(ai_enabled=True)
+    panel.resize(405, 837)
+    qtbot.addWidget(panel)
+    panel.show()
+    panel.add_agent_message("Respuesta visible.")
+    for index in range(40):
+        panel.add_activity(f"get_scan_status → resultado {index}")
+    qtbot.wait(1)
+
+    assert panel.activity_toggle.text() == t("chat.activity_count", count=40)
+    assert not panel.activity_scroll.isVisible()
+    assert panel.history_scroll.height() > 400
+    assert panel.input_edit.isVisible()
+
+    qtbot.mouseClick(panel.activity_toggle, Qt.MouseButton.LeftButton)
+    qtbot.wait(1)
+
+    assert panel.activity_scroll.isVisible()
+    assert panel.activity_scroll.height() <= 180
+    assert panel.history_scroll.height() > panel.activity_scroll.height()
+    assert panel.input_edit.isVisible()
+    panel.close()
+    panel.deleteLater()
+    qtbot.wait(1)
 
 
 def test_autonomous_dialog_requires_explicit_checked_consent(qtbot: QtBot) -> None:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import html
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -113,16 +116,27 @@ class ChatPanel(QWidget):
         self.history_layout.addStretch(1)
         self.history_scroll.setWidget(self.history_widget)
         layout.addWidget(self.history_scroll, 1)
-        activity_heading = QLabel(t("chat.activity"), self)
-        activity_font = activity_heading.font()
-        activity_font.setBold(True)
-        activity_heading.setFont(activity_font)
-        layout.addWidget(activity_heading)
-        self.activity_container = QWidget(self)
+        self.activity_toggle = QToolButton(self)
+        self.activity_toggle.setCheckable(True)
+        self.activity_toggle.setChecked(False)
+        self.activity_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.activity_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.activity_toggle.setText(t("chat.activity_count", count=0))
+        self.activity_toggle.setToolTip(t("chat.activity_expand"))
+        self.activity_toggle.clicked.connect(self._set_activity_expanded)
+        layout.addWidget(self.activity_toggle)
+        self.activity_scroll = QScrollArea(self)
+        self.activity_scroll.setWidgetResizable(True)
+        self.activity_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.activity_scroll.setMaximumHeight(180)
+        self.activity_scroll.setVisible(False)
+        self.activity_container = QWidget(self.activity_scroll)
         self.activity_layout = QVBoxLayout(self.activity_container)
-        self.activity_layout.setContentsMargins(0, 0, 0, 0)
+        self.activity_layout.setContentsMargins(0, 0, SPACE_1, 0)
         self.activity_layout.setSpacing(SPACE_1)
-        layout.addWidget(self.activity_container)
+        self.activity_layout.addStretch(1)
+        self.activity_scroll.setWidget(self.activity_container)
+        layout.addWidget(self.activity_scroll)
 
         input_row = QHBoxLayout()
         self.input_edit = QLineEdit(self)
@@ -182,7 +196,20 @@ class ChatPanel(QWidget):
         label = QLabel(f"▸ {normalized}", self.activity_container)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         label.setWordWrap(True)
-        self.activity_layout.addWidget(label)
+        self.activity_layout.insertWidget(self.activity_layout.count() - 1, label)
+        self.activity_toggle.setText(t("chat.activity_count", count=len(self._activities)))
+        bar = self.activity_scroll.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
+    @Slot(bool)
+    def _set_activity_expanded(self, expanded: bool) -> None:
+        self.activity_scroll.setVisible(expanded)
+        self.activity_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+        )
+        self.activity_toggle.setToolTip(
+            t("chat.activity_collapse") if expanded else t("chat.activity_expand")
+        )
 
     def show_confirmation(
         self,
@@ -275,9 +302,25 @@ class ChatPanel(QWidget):
         title_font.setBold(True)
         title_label.setFont(title_font)
         card_layout.addWidget(title_label)
-        body = QLabel(normalized, card)
+        body = QLabel(card)
+        body.setObjectName(f"chatMessageBody_{actor}")
         body.setWordWrap(True)
         body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if actor == "agent":
+            document = QTextDocument()
+            document.setDefaultStyleSheet(
+                "p { margin: 0; } code { font-family: Consolas; "
+                "background-color: #262A2F; color: #F0B27A; }"
+            )
+            document.setMarkdown(
+                html.escape(normalized),
+                QTextDocument.MarkdownFeature.MarkdownDialectGitHub,
+            )
+            body.setTextFormat(Qt.TextFormat.RichText)
+            body.setText(document.toHtml())
+        else:
+            body.setTextFormat(Qt.TextFormat.PlainText)
+            body.setText(normalized)
         card_layout.addWidget(body)
         self.history_layout.insertWidget(self.history_layout.count() - 1, card)
         self._scroll_to_bottom()

@@ -78,22 +78,27 @@ deshabilitadas en una sesión de sólo lectura.
 Si otra aplicación ya reservó uno de los atajos, M@D-Engine muestra una advertencia y mantiene el
 otro disponible. El teclado español asigna `º` a la tecla situada a la izquierda de `1`.
 
-## Trainers creados con IA
+## Trainers manuales y creados con IA
 
-Con una CLI configurada, el botón **Crear trainer con IA** inicia un flujo guiado: el agente
+Sin configurar IA, seleccione una vigilancia y pulse **Crear trainer manual…** en la lista de
+vigilancia o **Crear trainer con esta vigilancia…** en el overlay. El diálogo permite elegir el
+nombre, el comportamiento, los valores de activación y desactivación, el intervalo y las notas. La
+aplicación muestra la escritura exacta antes de probar y guardar el valor elegido.
+
+Con una CLI configurada, el botón **Crear trainer con IA** ofrece además un flujo guiado: el agente
 localiza el valor, lo añade a vigilancia y propone probarlo. Confirme en el programa objetivo que
-el efecto funciona antes de aceptar **Guardar truco**. Guardar exige una confirmación específica
-incluso en modo autónomo y M@D-Engine vuelve a leer la memoria para comprobar que conserva el valor
-activado.
+el efecto funciona antes de aceptar **Guardar truco**. M@D-Engine vuelve a leer la memoria para
+comprobar que conserva el valor activado.
 
 Cada trainer queda asociado al nombre y la arquitectura del ejecutable, en
 `%APPDATA%\M@D-Engine\trainers\<proceso-hash>\trainer.json`. Sólo persiste el nombre del truco, su
 tipo, su dirección portable cuando existe, los valores de activación y desactivación y sus notas;
 no persiste PID, handles, estado activo ni valores leídos en tiempo de ejecución. Al volver a
-adjuntar el mismo proceso, el overlay ofrece el truco inactivo. **Activar** congela el valor o
-escribe el valor activado; **Desactivar** descongela o restaura el valor desactivado. Las
-activaciones que escriben memoria muestran la confirmación exacta y nunca amplían un adjunto de
-sólo lectura.
+adjuntar el mismo proceso, el overlay ofrece el truco inactivo. Sus valores activado y desactivado
+se pueden editar y guardar directamente mientras esté inactivo; no dependen de la IA que creó el
+truco. **Activar** congela el valor o escribe el valor activado; **Desactivar** descongela o restaura
+el valor desactivado. Las activaciones que escriben memoria muestran la confirmación exacta y
+nunca amplían un adjunto de sólo lectura.
 
 
 ## Configuración del proveedor de IA
