@@ -11,7 +11,9 @@ from mempilot.agent.policies import AgentPolicy
 from mempilot.agent.tools import ToolRegistry
 from mempilot.controller import Actor
 from mempilot.core.backend import Architecture, ProcessIdentity
+from mempilot.core.data_types import DataType
 from mempilot.core.process_service import ProcessEntry
+from mempilot.services.trainer_service import TrainerTrick, TrainerTrickState, TrickMode
 
 
 class _ControllerStub:
@@ -21,6 +23,8 @@ class _ControllerStub:
         self.results_limit: int | None = None
         self.write_call: tuple[str, str, Actor] | None = None
         self.identity = ProcessIdentity(77, "memory_lab.exe", 10.0, None, Architecture.X64)
+        self.trainer_save_call: tuple[object, ...] | None = None
+        self.trainer_trick: TrainerTrick | None = None
 
     def list_processes(self, query: str, include_system: bool) -> list[ProcessEntry]:
         assert include_system is False
@@ -56,6 +60,46 @@ class _ControllerStub:
         self.results_limit = limit
         return SimpleNamespace(rows=[], offset=offset, limit=limit, total=0, total_unfiltered=0)
 
+    def list_trainer_tricks(self, actor: Actor) -> list[TrainerTrickState]:
+        assert actor is Actor.AGENT
+        return (
+            [TrainerTrickState(self.trainer_trick, True)] if self.trainer_trick is not None else []
+        )
+
+    def save_trainer_trick(
+        self,
+        watch_id: str,
+        name: str,
+        enabled_value: str,
+        disabled_value: str | None,
+        mode: TrickMode,
+        interval_ms: int,
+        notes: str,
+        actor: Actor,
+    ) -> TrainerTrick:
+        self.trainer_save_call = (
+            watch_id,
+            name,
+            enabled_value,
+            disabled_value,
+            mode,
+            interval_ms,
+            notes,
+            actor,
+        )
+        self.trainer_trick = TrainerTrick(
+            id="trick-1",
+            name=name,
+            data_type=DataType.INT32,
+            address_mode="absolute",
+            address=0x1020,
+            enabled_value=enabled_value,
+            disabled_value=disabled_value,
+            mode=mode,
+            interval_ms=interval_ms,
+        )
+        return self.trainer_trick
+
 
 def _registry(controller: _ControllerStub | None = None) -> ToolRegistry:
     return ToolRegistry(controller or _ControllerStub(), AgentPolicy())  # type: ignore[arg-type]
@@ -76,6 +120,8 @@ def test_registry_publishes_exact_step_31_tool_set() -> None:
         "add_watch",
         "list_watches",
         "write_watch",
+        "list_trainer_tricks",
+        "save_trainer_trick",
         "freeze_watch",
         "unfreeze_watch",
         "remove_watch",
@@ -159,6 +205,39 @@ def test_mutating_handler_uses_agent_actor() -> None:
     )
     assert result["ok"] is True
     assert controller.write_call == ("watch-1", "250", Actor.AGENT)
+
+
+def test_save_trainer_tool_uses_agent_actor_and_typed_mode() -> None:
+    controller = _ControllerStub()
+    result = json.loads(
+        _registry(controller).execute(
+            "save_trainer_trick",
+            json.dumps(
+                {
+                    "watch_id": "watch-1",
+                    "name": "Vida infinita",
+                    "enabled_value": "100",
+                    "disabled_value": None,
+                    "mode": "freeze",
+                    "interval_ms": 75,
+                    "notes": "Probado por el usuario.",
+                }
+            ),
+        )
+    )
+
+    assert result["ok"] is True
+    assert result["trick"]["name"] == "Vida infinita"
+    assert controller.trainer_save_call == (
+        "watch-1",
+        "Vida infinita",
+        "100",
+        None,
+        TrickMode.FREEZE,
+        75,
+        "Probado por el usuario.",
+        Actor.AGENT,
+    )
 
 
 def test_every_tool_returns_json_for_malformed_or_empty_input() -> None:

@@ -35,6 +35,7 @@ class ChatPanel(QWidget):
         self.setObjectName("chatPanel")
         self.setMinimumWidth(320)
         self._ai_enabled = ai_enabled
+        self._busy = False
         self._history: list[tuple[str, str]] = []
         self._activities: list[str] = []
         self._build_ui()
@@ -81,6 +82,10 @@ class ChatPanel(QWidget):
         self.thinking_label.setProperty("tone", "info")
         self.thinking_label.setVisible(False)
         layout.addWidget(self.thinking_label)
+        self.trainer_button = QPushButton(t("chat.trainer_creator"), self)
+        self.trainer_button.setAccessibleName(t("chat.trainer_creator"))
+        self.trainer_button.clicked.connect(self._start_trainer_creator)
+        layout.addWidget(self.trainer_button)
 
         self.disabled_card = QFrame(self)
         self.disabled_card.setProperty("card", True)
@@ -131,7 +136,8 @@ class ChatPanel(QWidget):
         self.send_button.clicked.connect(self._submit)
         input_row.addWidget(self.send_button)
         layout.addLayout(input_row)
-        QWidget.setTabOrder(self.mode_combo, self.input_edit)
+        QWidget.setTabOrder(self.mode_combo, self.trainer_button)
+        QWidget.setTabOrder(self.trainer_button, self.input_edit)
         QWidget.setTabOrder(self.input_edit, self.send_button)
 
     def set_ai_enabled(self, enabled: bool) -> None:
@@ -140,12 +146,17 @@ class ChatPanel(QWidget):
         self.disabled_card.setVisible(not enabled)
         self.mode_combo.setEnabled(enabled)
         self.mode_combo.setToolTip("" if enabled else t("agent.disabled"))
+        self.trainer_button.setEnabled(enabled and not self._busy)
+        self.trainer_button.setToolTip("" if enabled else t("agent.disabled"))
 
     def set_busy(self, busy: bool) -> None:
         """Expose provider activity without blocking the rest of the application."""
+        self._busy = busy
         self.thinking_label.setVisible(busy)
-        self.input_edit.setEnabled(self._ai_enabled and not busy)
-        self.send_button.setEnabled(self._ai_enabled and not busy)
+        enabled = self._ai_enabled and not busy
+        self.input_edit.setEnabled(enabled)
+        self.send_button.setEnabled(enabled)
+        self.trainer_button.setEnabled(enabled)
 
     def set_mode(self, mode: str) -> None:
         """Synchronize the selector without recursively requesting a mode change."""
@@ -234,6 +245,14 @@ class ChatPanel(QWidget):
         self.message_submitted.emit(text)
         if not self._ai_enabled:
             self.add_agent_message(t("chat.offline_reply"))
+
+    @Slot()
+    def _start_trainer_creator(self) -> None:
+        if not self._ai_enabled or self._busy:
+            return
+        prompt = t("chat.trainer_prompt")
+        self.add_user_message(prompt)
+        self.message_submitted.emit(prompt)
 
     @Slot()
     def _emit_mode(self) -> None:

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from mempilot.core.backend import ProcessIdentity
 from mempilot.core.watcher import WatchEntry
 from mempilot.i18n import t
+from mempilot.services.trainer_service import TrainerTrickState
 from mempilot.ui.theme import SPACE_2, SPACE_3, monospace_font
 
 
@@ -32,6 +33,7 @@ class OverlayWindow(QWidget):
     message_submitted = Signal(str)
     write_requested = Signal(str, str)
     freeze_requested = Signal(str, str, bool)
+    trainer_toggle_requested = Signal(str, bool)
 
     def __init__(self) -> None:
         super().__init__(None)
@@ -43,12 +45,13 @@ class OverlayWindow(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setWindowOpacity(0.97)
-        self.setMinimumSize(440, 540)
-        self.resize(500, 640)
+        self.setMinimumSize(440, 620)
+        self.resize(500, 720)
         self._ai_enabled = False
         self._write_access = False
         self._identity: ProcessIdentity | None = None
         self._watches: dict[str, WatchEntry] = {}
+        self._trainer_tricks: dict[str, TrainerTrickState] = {}
         self._pending_confirmation: tuple[Callable[[], None], Callable[[], None]] | None = None
         self._build_ui()
 
@@ -128,6 +131,20 @@ class OverlayWindow(QWidget):
         confirmation_layout.addLayout(confirmation_actions)
         self.confirmation_card.setVisible(False)
         layout.addWidget(self.confirmation_card)
+        trainers = QGroupBox(t("overlay.trainers"), card)
+        trainer_layout = QVBoxLayout(trainers)
+        self.trainer_combo = QComboBox(trainers)
+        self.trainer_combo.setAccessibleName(t("overlay.trainer"))
+        self.trainer_combo.currentIndexChanged.connect(self._trainer_selected)
+        trainer_layout.addWidget(self.trainer_combo)
+        self.trainer_info = QLabel("", trainers)
+        self.trainer_info.setWordWrap(True)
+        trainer_layout.addWidget(self.trainer_info)
+        self.trainer_toggle_button = QPushButton(t("overlay.trainer.activate"), trainers)
+        self.trainer_toggle_button.setAccessibleName(t("overlay.trainer.activate"))
+        self.trainer_toggle_button.clicked.connect(self._request_trainer_toggle)
+        trainer_layout.addWidget(self.trainer_toggle_button)
+        layout.addWidget(trainers)
 
         manual = QGroupBox(t("overlay.manual"), card)
         manual_layout = QVBoxLayout(manual)
@@ -179,6 +196,7 @@ class OverlayWindow(QWidget):
             )
         )
         self.refresh_watches(watches)
+        self._trainer_selected()
         screen = self.screen()
         cursor_screen = self.screen().virtualSiblingAt(QCursor.pos())
         if cursor_screen is not None:
@@ -244,6 +262,22 @@ class OverlayWindow(QWidget):
         self.watch_combo.blockSignals(blocked)
         self._watch_selected()
 
+    def refresh_trainer_tricks(self, states: Sequence[TrainerTrickState]) -> None:
+        """Refresh the process-specific saved tricks without changing their runtime state."""
+        selected = self.trainer_combo.currentData()
+        self._trainer_tricks = {state.trick.id: state for state in states}
+        blocked = self.trainer_combo.blockSignals(True)
+        self.trainer_combo.clear()
+        for state in states:
+            marker = "●" if state.active else "○"
+            self.trainer_combo.addItem(f"{marker} {state.trick.name}", state.trick.id)
+        if isinstance(selected, str):
+            index = self.trainer_combo.findData(selected)
+            if index >= 0:
+                self.trainer_combo.setCurrentIndex(index)
+        self.trainer_combo.blockSignals(blocked)
+        self._trainer_selected()
+
     def set_operation_result(self, message: str, *, error: bool = False) -> None:
         self.operation_status.setText(message)
         self.operation_status.setProperty("tone", "error" if error else "success")
@@ -281,6 +315,29 @@ class OverlayWindow(QWidget):
         self._update_manual_buttons()
 
     @Slot()
+    def _trainer_selected(self) -> None:
+        state = self._selected_trainer_trick()
+        if state is None:
+            process_name = self._identity.name if self._identity is not None else "—"
+            self.trainer_info.setText(t("overlay.no_trainers", name=process_name))
+            self.trainer_toggle_button.setText(t("overlay.trainer.activate"))
+            self.trainer_toggle_button.setEnabled(False)
+            return
+        trick = state.trick
+        self.trainer_info.setText(
+            t(
+                "overlay.trainer_info",
+                type=t(f"data_type.{trick.data_type.value}"),
+                mode=t(f"overlay.trainer.mode.{trick.mode.value}"),
+                state=t("overlay.trainer.active" if state.active else "overlay.trainer.inactive"),
+            )
+        )
+        label = t("overlay.trainer.deactivate") if state.active else t("overlay.trainer.activate")
+        self.trainer_toggle_button.setText(label)
+        self.trainer_toggle_button.setAccessibleName(label)
+        self.trainer_toggle_button.setEnabled(self._write_access)
+
+    @Slot()
     def _update_manual_buttons(self) -> None:
         entry = self._selected_watch()
         has_value = bool(self.value_edit.text().strip())
@@ -306,6 +363,12 @@ class OverlayWindow(QWidget):
         self.freeze_requested.emit(entry.id, value, not entry.frozen)
 
     @Slot()
+    def _request_trainer_toggle(self) -> None:
+        state = self._selected_trainer_trick()
+        if state is not None and self._write_access:
+            self.trainer_toggle_requested.emit(state.trick.id, not state.active)
+
+    @Slot()
     def _confirm_pending(self) -> None:
         if self._pending_confirmation is None:
             return
@@ -326,6 +389,10 @@ class OverlayWindow(QWidget):
     def _selected_watch(self) -> WatchEntry | None:
         watch_id = self.watch_combo.currentData()
         return self._watches.get(watch_id) if isinstance(watch_id, str) else None
+
+    def _selected_trainer_trick(self) -> TrainerTrickState | None:
+        trick_id = self.trainer_combo.currentData()
+        return self._trainer_tricks.get(trick_id) if isinstance(trick_id, str) else None
 
     def _append_message(self, role: str, text: str) -> None:
         normalized = text.strip()

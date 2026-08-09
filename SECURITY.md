@@ -23,6 +23,20 @@ falla de forma cerrada; la inspección manual permanece disponible.
 
 En modo guiado, escribir, congelar y cargar operaciones mutables propuestas por IA devuelven una solicitud de confirmación con proceso, dirección, tipo y valor. Sólo `Confirmar` autoriza la ejecución; `Rechazar`, cerrar la tarjeta o agotar el tiempo la deniega. Una confirmación no puede reutilizarse para otra llamada ni para otro proceso.
 
+### Guardado y activación de trainers
+
+`save_trainer_trick` exige confirmación expresa incluso en modo autónomo. Antes de persistir,
+`AppController` vuelve a leer la dirección mediante el backend y rechaza el guardado si el valor
+ya no coincide con el que el usuario probó. El catálogo se limita al nombre y arquitectura del
+proceso, dirección portable, tipo, valores de activación y desactivación y notas; excluye PID,
+handles, lecturas actuales, estado congelado y credenciales.
+
+Los trainers se cargan inactivos en cada nuevo adjunto. Activar o desactivar vuelve a pasar por
+`AppController`, el handle actual, la identidad adjunta, la política y la auditoría. El overlay
+deshabilita esas acciones en sólo lectura y confirma cualquier activación o restauración que
+escriba memoria. Un trainer de congelado se desactiva descongelando; uno de escritura restaura
+obligatoriamente el valor desactivado guardado.
+
 ## Modo autónomo
 
 La activación muestra literalmente los permisos concedidos y exige consentimiento. La autorización queda vinculada a una única identidad de proceso, conserva el nivel de acceso existente, permite escribir y congelar sólo mediante herramientas registradas y aplica un máximo visible de escrituras. El agente no puede cambiar de proceso, aumentar el cupo, ampliar permisos, cargar un workspace sin respetar la política ni continuar tras cancelación. Desactivar el modo o desacoplar revoca la concesión.

@@ -71,6 +71,8 @@ class AgentPolicy:
                 "Se desactivó el modo autónomo; pide al usuario que lo autorice de nuevo.",
             )
 
+        if tool.always_confirm:
+            return Decision.CONFIRM, "El usuario debe confirmar que el truco funciona."
         if tool.mutating and self.mode is AgentMode.GUIDED:
             return Decision.CONFIRM, "Esta acción requiere confirmación del usuario."
 

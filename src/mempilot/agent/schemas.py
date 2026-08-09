@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from mempilot.core.data_types import DataType
 from mempilot.core.scanner import ScanMode
+from mempilot.services.trainer_service import TrickMode
 
 _PROHIBITED_SCHEMA_KEYWORDS = frozenset(
     {
@@ -140,6 +141,20 @@ class RemoveWatchArgs(_StrictModel):
     watch_id: str
 
 
+class ListTrainerTricksArgs(_StrictModel):
+    pass
+
+
+class SaveTrainerTrickArgs(_StrictModel):
+    watch_id: str
+    name: str
+    enabled_value: str
+    disabled_value: str | None
+    mode: TrickMode
+    interval_ms: int | None
+    notes: str | None
+
+
 class SaveWorkspaceArgs(_StrictModel):
     name: str
 
@@ -262,6 +277,31 @@ class WatchListResult(_StrictModel):
     watches: list[WatchResult]
     count: int
     truncated: bool
+
+
+class TrainerTrickResult(_StrictModel):
+    id: str
+    name: str
+    data_type: str
+    mode: str
+    enabled_value: str
+    disabled_value: str | None
+    interval_ms: int
+    notes: str
+    active: bool
+
+
+class TrainerTrickSavedResult(_StrictModel):
+    ok: bool
+    process_name: str
+    trick: TrainerTrickResult
+
+
+class TrainerTrickListResult(_StrictModel):
+    ok: bool
+    process_name: str
+    tricks: list[TrainerTrickResult]
+    count: int
 
 
 class WorkspaceResult(_StrictModel):

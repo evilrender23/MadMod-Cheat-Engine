@@ -32,6 +32,7 @@ from mempilot.core.scanner import ScanProgress, ScanRequest
 from mempilot.core.watcher import WatchEntry, WatchSpec
 from mempilot.i18n import t
 from mempilot.services.settings_service import SettingsService
+from mempilot.services.trainer_service import TrainerTrickState, TrickMode
 from mempilot.ui.dialogs.attach_dialog import AttachDialog
 from mempilot.ui.dialogs.confirm_dialog import ConfirmDialog
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
@@ -145,6 +146,7 @@ class MainWindow(QMainWindow):
         self.overlay.message_submitted.connect(self._submit_overlay_message)
         self.overlay.write_requested.connect(self._overlay_write_watch)
         self.overlay.freeze_requested.connect(self._overlay_set_freeze)
+        self.overlay.trainer_toggle_requested.connect(self._overlay_toggle_trick)
         if self.orchestrator is not None:
             self.chat_panel.message_submitted.connect(self._submit_agent_message)
             self.chat_panel.message_submitted.connect(self._mirror_main_user_in_overlay)
@@ -170,6 +172,7 @@ class MainWindow(QMainWindow):
         self.controller.watch_write_error.connect(self._on_watch_error)
         self.controller.autonomous_changed.connect(self._on_autonomous_changed)
         self.controller.watches_changed.connect(self._refresh_overlay_watches)
+        self.controller.trainers_changed.connect(self._refresh_overlay_trainers)
 
     def _install_global_actions(self) -> None:
         specs = (
@@ -292,10 +295,79 @@ class MainWindow(QMainWindow):
             self._last_write_access,
             self.controller.list_watches(),
         )
+        self._refresh_overlay_trainers()
 
     @Slot()
     def _refresh_overlay_watches(self) -> None:
         self.overlay.refresh_watches(self.controller.list_watches())
+
+    @Slot()
+    def _refresh_overlay_trainers(self) -> None:
+        identity = self.controller.attached_identity()
+        if identity is None:
+            self.overlay.refresh_trainer_tricks(())
+            return
+        try:
+            states = self.controller.list_trainer_tricks(Actor.USER)
+        except Exception as exc:
+            self.overlay.refresh_trainer_tricks(())
+            self.overlay.set_operation_result(str(exc), error=True)
+            return
+        self.overlay.refresh_trainer_tricks(states)
+
+    @Slot(str, bool)
+    def _overlay_toggle_trick(self, trick_id: str, active: bool) -> None:
+        if not self._overlay_mutations_allowed():
+            return
+        try:
+            state = next(
+                (
+                    item
+                    for item in self.controller.list_trainer_tricks(Actor.USER)
+                    if item.trick.id == trick_id
+                ),
+                None,
+            )
+            if not isinstance(state, TrainerTrickState):
+                identity = self.controller.attached_identity()
+                process_name = identity.name if identity is not None else "—"
+                self.overlay.set_operation_result(
+                    t("overlay.no_trainers", name=process_name),
+                    error=True,
+                )
+                return
+            trick = state.trick
+            address = self.controller.trainer_trick_address(trick_id, Actor.USER)
+            needs_confirmation = active or trick.mode is TrickMode.WRITE_PAIR
+            if needs_confirmation:
+                current = self.controller.read_address(address, trick.data_type)
+                new_value = (
+                    trick.enabled_value if active else trick.disabled_value or trick.enabled_value
+                )
+                confirmation = ConfirmDialog(
+                    action=t(
+                        "overlay.trainer.activate_confirm"
+                        if active
+                        else "overlay.trainer.deactivate_confirm",
+                        name=trick.name,
+                    ),
+                    address=address,
+                    data_type=trick.data_type,
+                    current_value=current,
+                    new_value=new_value,
+                    allow_remember=False,
+                    parent=self.overlay,
+                )
+                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                    return
+            self.controller.set_trainer_trick_active(trick_id, active, Actor.USER)
+        except Exception as exc:
+            self.overlay.set_operation_result(str(exc), error=True)
+            return
+        self.overlay.set_operation_result(
+            t("overlay.trainer.activated" if active else "overlay.trainer.deactivated")
+        )
+        self._refresh_overlay_trainers()
 
     @Slot(str, str)
     def _overlay_write_watch(self, watch_id: str, value: str) -> None:

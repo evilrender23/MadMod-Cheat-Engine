@@ -22,8 +22,18 @@ def _tool(
     mutating: bool = False,
     attached: bool = False,
     states: frozenset[FlowState] | None = None,
+    always_confirm: bool = False,
 ) -> ToolDef:
-    return ToolDef(name, "prueba", _Args, _handler, mutating, attached, states)
+    return ToolDef(
+        name,
+        "prueba",
+        _Args,
+        _handler,
+        mutating,
+        attached,
+        states,
+        always_confirm,
+    )
 
 
 def _identity(pid: int = 101, created: float = 1.0) -> ProcessIdentity:
@@ -92,6 +102,25 @@ def test_autonomous_mutations_consume_limit_then_deny() -> None:
     assert decision is Decision.DENY
     assert policy.writes_used == 2
     assert "Límite de 2" in reason
+
+
+def test_always_confirm_tool_still_requires_user_in_autonomous_mode() -> None:
+    identity = _identity()
+    policy = AgentPolicy(
+        mode=AgentMode.AUTONOMOUS,
+        write_limit=20,
+        bound_identity=identity,
+    )
+
+    decision, reason = policy.evaluate(
+        _tool(name="save_trainer_trick", mutating=True, always_confirm=True),
+        FlowState.ATTACHED,
+        identity,
+    )
+
+    assert decision is Decision.CONFIRM
+    assert "truco" in reason
+    assert policy.writes_used == 0
 
 
 def test_tool_outside_allowed_flow_state_is_denied() -> None:

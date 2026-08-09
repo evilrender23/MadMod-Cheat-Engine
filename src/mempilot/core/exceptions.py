@@ -79,6 +79,10 @@ class WorkspaceError(MemPilotError):
     default_message = "El workspace no es válido. Comprueba el archivo o crea uno nuevo."
 
 
+class TrainerError(MemPilotError):
+    default_message = "El trainer no es válido. Comprueba el proceso y los trucos guardados."
+
+
 class PolicyDenied(MemPilotError):  # noqa: N818 - public contract
     default_message = (
         "La política de seguridad impide esta operación. Revisa el modo y los permisos del agente."

@@ -70,12 +70,30 @@ si la ventana activa no pertenece exactamente al PID adjunto. **Esc**, **Pause**
 
 El overlay reutiliza la misma conversación y el mismo orquestador del panel principal: muestra
 respuestas, actividad de herramientas y confirmaciones sin crear una sesión de IA paralela. La
-sección **Ajustes manuales** permite elegir una vigilancia existente, escribir un valor o
-congelarlo/descongelarlo. Esas operaciones pasan por `AppController`, conservan la auditoría y
-las confirmaciones, y quedan deshabilitadas en una sesión de sólo lectura.
+sección **Trucos guardados** activa o desactiva trainers del proceso actual; **Ajustes manuales**
+permite elegir una vigilancia existente, escribir un valor o congelarlo/descongelarlo. Todas esas
+operaciones pasan por `AppController`, conservan la auditoría y las confirmaciones, y quedan
+deshabilitadas en una sesión de sólo lectura.
 
 Si otra aplicación ya reservó uno de los atajos, MemPilot muestra una advertencia y mantiene el
 otro disponible. El teclado español asigna `º` a la tecla situada a la izquierda de `1`.
+
+## Trainers creados con IA
+
+Con una CLI configurada, el botón **Crear trainer con IA** inicia un flujo guiado: el agente
+localiza el valor, lo añade a vigilancia y propone probarlo. Confirme en el programa objetivo que
+el efecto funciona antes de aceptar **Guardar truco**. Guardar exige una confirmación específica
+incluso en modo autónomo y MemPilot vuelve a leer la memoria para comprobar que conserva el valor
+activado.
+
+Cada trainer queda asociado al nombre y la arquitectura del ejecutable, en
+`%APPDATA%\MemPilot\trainers\<proceso-hash>\trainer.json`. Sólo persiste el nombre del truco, su
+tipo, su dirección portable cuando existe, los valores de activación y desactivación y sus notas;
+no persiste PID, handles, estado activo ni valores leídos en tiempo de ejecución. Al volver a
+adjuntar el mismo proceso, el overlay ofrece el truco inactivo. **Activar** congela el valor o
+escribe el valor activado; **Desactivar** descongela o restaura el valor desactivado. Las
+activaciones que escriben memoria muestran la confirmación exacta y nunca amplían un adjunto de
+sólo lectura.
 
 
 ## Configuración del proveedor de IA
@@ -98,7 +116,7 @@ guardar, sin reiniciar la aplicación.
 Cada turno se ejecuta en un directorio temporal vacío, con salida JSON validada. Claude recibe
 sus herramientas internas deshabilitadas; Codex recibe su shell y extensiones deshabilitadas;
 Antigravity funciona en modo plan/sandbox sin autoaprobar permisos. Las únicas acciones sobre
-MemPilot siguen pasando por las 18 herramientas Pydantic, `AppController` y la política local.
+MemPilot siguen pasando por las 20 herramientas Pydantic, `AppController` y la política local.
 
 En modo **Guiado**, toda escritura o congelado exige confirmación. Activar **Autónomo** muestra
 los permisos exactos, fija el proceso, limita el número de escrituras y exige una casilla de
@@ -140,7 +158,7 @@ flowchart LR
     T --> C
     C --> S[ScanEngine / ScanSession]
     C --> W[WatchScheduler / Freezer]
-    C --> P[Servicios de procesos y workspaces]
+    C --> P[Servicios de procesos, workspaces y trainers]
     S --> B[MemoryBackend]
     W --> B
     B --> K[APIs Win32]
@@ -180,5 +198,6 @@ No incluye escáner inverso de punteros, desensamblador ni “find what accesses
 10. Escaneo de `Texto UTF-16 LE` con `PlayerOne`, y de `AOB` con `4D 45 4D 50 ?? ?? BE EF`.
 11. Guardar workspace, cerrar MemPilot, reabrir, cargar el workspace: las vigilancias vuelven.
 12. Panel de chat (con una CLI configurada): «Quiero encontrar la vida. Ahora tengo 100.» → el agente escanea; «Ahora tengo 73.» → refina; con pocos candidatos los añade a vigilancia y pide confirmación antes de escribir.
-13. Con `.\scripts\run.ps1 --no-ai` el chat aparece desactivado y los pasos 1–11 siguen funcionando.
-14. Cerrar la aplicación y comprobar en el Administrador de tareas que no queda ningún proceso `MemPilot`/`python` huérfano.
+13. Pulse **Crear trainer con IA**, pruebe el valor propuesto y confirme **Guardar truco**. Abra el overlay sobre Memory Lab, desactive el truco y compruebe que el daño vuelve a funcionar; actívelo y compruebe que la vida vuelve al valor guardado.
+14. Con `.\scripts\run.ps1 --no-ai` el chat aparece desactivado y las operaciones manuales, incluidos los trainers ya guardados, siguen funcionando.
+15. Cerrar la aplicación y comprobar en el Administrador de tareas que no queda ningún proceso `MemPilot`/`python` huérfano.

@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -17,7 +17,7 @@ import numpy as np
 import psutil
 from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, Signal, Slot
 
-from mempilot.config.paths import repo_root
+from mempilot.config.paths import TRAINER_DIR, repo_root
 from mempilot.config.settings import Settings
 from mempilot.core.backend import AccessMode, MemoryBackend, ModuleInfo, ProcessIdentity
 from mempilot.core.data_types import (
@@ -35,12 +35,14 @@ from mempilot.core.exceptions import (
     PolicyDenied,
     ProcessExitedError,
     ScanError,
+    TrainerError,
     WorkspaceError,
 )
 from mempilot.core.freezer import FreezeController
 from mempilot.core.pointer_chain import (
     ChainResolution,
     PointerChain,
+    address_to_module_offset,
 )
 from mempilot.core.pointer_chain import (
     resolve_chain as resolve_pointer_chain,
@@ -62,6 +64,12 @@ from mempilot.core.scanner import (
 )
 from mempilot.core.watcher import WatchEntry, WatchSpec, WatchTable, resolve_watch_address
 from mempilot.services.audit_service import AuditService
+from mempilot.services.trainer_service import (
+    TrainerService,
+    TrainerTrick,
+    TrainerTrickState,
+    TrickMode,
+)
 from mempilot.services.workspace_service import WorkspaceModel, load_workspace, save_workspace
 from mempilot.ui.workers import (
     AgentJob,
@@ -134,6 +142,7 @@ class AppController(QObject):
     scan_failed = Signal(str)
     scan_cancelled = Signal()
     watches_changed = Signal()
+    trainers_changed = Signal()
     watch_values = Signal(object)
     audit_appended = Signal(object)
     agent_event = Signal(object)
@@ -152,6 +161,7 @@ class AppController(QObject):
         *,
         process_service: ProcessService | None = None,
         audit_service: AuditService | None = None,
+        trainer_service: TrainerService | None = None,
         settings: Settings | None = None,
         agent_policy: AgentPolicyBinding | None = None,
         parent: QObject | None = None,
@@ -165,6 +175,7 @@ class AppController(QObject):
         self._process_service = process_service
         self._audit = audit_service or AuditService()
         self._settings = settings or Settings()
+        self._trainer_service = trainer_service or TrainerService(TRAINER_DIR)
         self._agent_policy = agent_policy or _LocalAgentPolicyBinding()
         self._engine = ScanEngine(self._backend)
         self._watches = WatchTable(self._watches_did_change)
@@ -175,6 +186,8 @@ class AppController(QObject):
         self._scan_is_refinement = False
         self._pointer_chains: dict[str, PointerChain] = {}
         self._workspace_created_at: datetime | None = None
+        self._trainer_watch_ids: dict[str, str] = {}
+        self._active_tricks: set[str] = set()
         initial_identity = self._backend.identity
         self._known_identities: dict[int, ProcessIdentity] = (
             {initial_identity.pid: initial_identity} if initial_identity is not None else {}
@@ -227,6 +240,8 @@ class AppController(QObject):
         self._agent_policy.bound_identity = identity
         self._session = None
         self._last_progress = None
+        self._trainer_watch_ids.clear()
+        self._active_tricks.clear()
         self._start_scheduler()
         self._audit.record(
             actor.value,
@@ -236,6 +251,7 @@ class AppController(QObject):
             "ok",
         )
         self.attached.emit(identity)
+        self.trainers_changed.emit()
         return identity
 
     def detach(self, reason: str, actor: Actor = Actor.USER) -> None:
@@ -458,6 +474,16 @@ class AppController(QObject):
             f"pid={identity.pid}; etiqueta={entry.label}",
             "ok",
         )
+        affected = [
+            trick_id
+            for trick_id, runtime_watch_id in self._trainer_watch_ids.items()
+            if runtime_watch_id == watch_id
+        ]
+        for trick_id in affected:
+            self._trainer_watch_ids.pop(trick_id, None)
+            self._active_tricks.discard(trick_id)
+        if affected:
+            self.trainers_changed.emit()
 
     def set_watch_value(self, watch_id: str, value: str, actor: Actor) -> None:
         identity = self._require_attached(actor)
@@ -477,6 +503,21 @@ class AppController(QObject):
             f"pid={identity.pid}; dirección=0x{address:016X}; valor={value}",
             "ok",
         )
+        affected = [
+            trick_id
+            for trick_id, runtime_watch_id in self._trainer_watch_ids.items()
+            if runtime_watch_id == watch_id
+        ]
+        if affected:
+            for trick_id in affected:
+                trick = self._trainer_service.find(identity, trick_id)
+                if trick.mode is not TrickMode.WRITE_PAIR:
+                    continue
+                if encoded == encode_value(entry.data_type, trick.enabled_value):
+                    self._active_tricks.add(trick_id)
+                else:
+                    self._active_tricks.discard(trick_id)
+            self.trainers_changed.emit()
 
     def set_freeze(
         self, watch_id: str, frozen: bool, value: str | None, interval_ms: int, actor: Actor
@@ -499,6 +540,165 @@ class AppController(QObject):
             f"pid={identity.pid}; valor={updated.desired_value}; intervalo={interval_ms}ms",
             "ok",
         )
+        if watch_id in self._trainer_watch_ids.values():
+            self.trainers_changed.emit()
+
+    def list_trainer_tricks(self, actor: Actor = Actor.USER) -> list[TrainerTrickState]:
+        """Return process-bound saved tricks with their current runtime state."""
+        identity = self._require_attached(actor)
+        catalog = self._trainer_service.load(identity)
+        return [
+            TrainerTrickState(trick=trick, active=self._trick_is_active(trick))
+            for trick in catalog.tricks
+        ]
+
+    def save_trainer_trick(
+        self,
+        watch_id: str,
+        *,
+        name: str,
+        enabled_value: str,
+        disabled_value: str | None,
+        mode: TrickMode,
+        interval_ms: int,
+        notes: str,
+        actor: Actor,
+    ) -> TrainerTrick:
+        """Persist a tested watch only when memory still contains its enabled value."""
+        identity = self._require_attached(actor)
+        entry = self._watches.get(watch_id)
+        enabled = encode_value(entry.data_type, enabled_value)
+        if disabled_value is not None:
+            encode_value(entry.data_type, disabled_value)
+        address, error = resolve_watch_address(entry, self._backend, self._safe_modules())
+        if address is None:
+            raise InvalidAddressError(error or "No se pudo resolver la vigilancia.")
+        if self._backend.read(address, len(enabled)) != enabled:
+            raise TrainerError(
+                "El valor actual ya no coincide con el valor activado. "
+                "Prueba de nuevo el truco antes de guardarlo."
+            )
+        portable = entry
+        if entry.address is not None:
+            module_location = address_to_module_offset(entry.address, self._safe_modules())
+            if module_location is not None:
+                module, offset = module_location
+                portable = replace(entry, address=None, module=module, offset=offset)
+        trick = self._trainer_service.save_trick(
+            identity,
+            portable,
+            name=name,
+            enabled_value=enabled_value,
+            disabled_value=disabled_value,
+            mode=mode,
+            interval_ms=interval_ms,
+            notes=notes,
+        )
+        self._trainer_watch_ids[trick.id] = watch_id
+        if trick.mode is TrickMode.FREEZE:
+            self.set_freeze(
+                watch_id,
+                True,
+                trick.enabled_value,
+                trick.interval_ms,
+                actor,
+            )
+        self._active_tricks.add(trick.id)
+        self._audit.record(
+            actor.value,
+            "trainer_trick_save",
+            trick.id,
+            (
+                f"pid={identity.pid}; proceso={identity.name}; "
+                f"truco={trick.name}; modo={trick.mode.value}"
+            ),
+            "ok",
+        )
+        self.trainers_changed.emit()
+        return trick
+
+    def trainer_trick_address(self, trick_id: str, actor: Actor = Actor.USER) -> int:
+        """Resolve one saved trick without changing memory or the watch table."""
+        identity = self._require_attached(actor)
+        trick = self._trainer_service.find(identity, trick_id)
+        preview = WatchEntry.from_spec(trick.watch_spec())
+        address, error = resolve_watch_address(preview, self._backend, self._safe_modules())
+        if address is None:
+            raise InvalidAddressError(error or "No se pudo resolver la dirección del truco.")
+        return address
+
+    def set_trainer_trick_active(
+        self, trick_id: str, active: bool, actor: Actor
+    ) -> TrainerTrickState:
+        """Activate or deactivate a saved trick exclusively through guarded watch methods."""
+        identity = self._require_attached(actor)
+        trick = self._trainer_service.find(identity, trick_id)
+        watch = self._runtime_watch_for_trick(trick, actor)
+        if active:
+            if trick.mode is TrickMode.FREEZE:
+                self.set_freeze(
+                    watch.id,
+                    True,
+                    trick.enabled_value,
+                    trick.interval_ms,
+                    actor,
+                )
+            else:
+                self.set_watch_value(watch.id, trick.enabled_value, actor)
+            self._active_tricks.add(trick.id)
+        else:
+            if trick.mode is TrickMode.FREEZE:
+                self.set_freeze(
+                    watch.id,
+                    False,
+                    trick.enabled_value,
+                    trick.interval_ms,
+                    actor,
+                )
+            else:
+                if trick.disabled_value is None:
+                    raise TrainerError("El truco no tiene un valor para desactivarlo.")
+                self.set_watch_value(watch.id, trick.disabled_value, actor)
+            self._active_tricks.discard(trick.id)
+        self._audit.record(
+            actor.value,
+            "trainer_trick_on" if active else "trainer_trick_off",
+            trick.id,
+            f"pid={identity.pid}; proceso={identity.name}; truco={trick.name}",
+            "ok",
+        )
+        self.trainers_changed.emit()
+        return TrainerTrickState(trick=trick, active=active)
+
+    def _runtime_watch_for_trick(self, trick: TrainerTrick, actor: Actor) -> WatchEntry:
+        watch_id = self._trainer_watch_ids.get(trick.id)
+        if watch_id is not None:
+            try:
+                return self._watches.get(watch_id)
+            except KeyError:
+                self._trainer_watch_ids.pop(trick.id, None)
+        watch = self.add_watch(trick.watch_spec(), actor)
+        self._trainer_watch_ids[trick.id] = watch.id
+        return watch
+
+    def _trick_is_active(self, trick: TrainerTrick) -> bool:
+        if trick.id not in self._active_tricks:
+            return False
+        if trick.mode is TrickMode.WRITE_PAIR:
+            return True
+        watch_id = self._trainer_watch_ids.get(trick.id)
+        if watch_id is None:
+            self._active_tricks.discard(trick.id)
+            return False
+        try:
+            watch = self._watches.get(watch_id)
+        except KeyError:
+            self._active_tricks.discard(trick.id)
+            return False
+        active = watch.frozen and watch.desired_value == trick.enabled_value
+        if not active:
+            self._active_tricks.discard(trick.id)
+        return active
 
     def resolve_chain(self, chain: PointerChain) -> ChainResolution:
         self._require_attached(Actor.USER)
@@ -662,10 +862,13 @@ class AppController(QObject):
         self._session = None
         self._last_progress = None
         self._active_scan_request = None
+        self._trainer_watch_ids.clear()
+        self._active_tricks.clear()
         self._agent_policy.bound_identity = None
         if identity is not None:
             self._audit.record(actor.value, "detach", f"pid:{identity.pid}", reason, "ok")
         self.detached.emit(reason)
+        self.trainers_changed.emit()
 
     def _launch_scan_worker(
         self, request: ScanRequest, previous: CandidateSet | UnknownSnapshot | None

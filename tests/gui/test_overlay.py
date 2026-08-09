@@ -23,6 +23,7 @@ from mempilot.core.watcher import WatchSpec
 from mempilot.i18n import t
 from mempilot.services.audit_service import AuditService
 from mempilot.services.settings_service import SettingsService
+from mempilot.services.trainer_service import TrainerService, TrickMode
 from mempilot.ui.dialogs.confirm_dialog import ConfirmDialog
 from mempilot.ui.main_window import MainWindow
 
@@ -46,6 +47,7 @@ def _window(
     controller = AppController(
         backend,
         audit_service=AuditService(tmp_path / "audit.jsonl"),
+        trainer_service=TrainerService(tmp_path / "trainers"),
         settings=settings,
     )
     orchestrator = None
@@ -134,6 +136,53 @@ def test_overlay_manual_write_freeze_and_read_only_guard(
     assert backend.read_into(0x1020, memoryview(raw)) == 4
     assert decode_value(DataType.INT32, bytes(raw)) == "250"
     assert window.overlay.operation_status.text() == t("overlay.read_only")
+    window.close()
+
+
+def test_overlay_saved_trick_activates_and_deactivates_reversibly(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window, controller, _backend, identity = _window(tmp_path, qtbot)
+    watch = controller.add_watch(
+        WatchSpec("Health", DataType.INT32, address=0x1020, interval_ms=50),
+        Actor.USER,
+    )
+    trick = controller.save_trainer_trick(
+        watch.id,
+        name="Vida infinita",
+        enabled_value="100",
+        disabled_value=None,
+        mode=TrickMode.FREEZE,
+        interval_ms=50,
+        notes="Probado por el usuario.",
+        actor=Actor.USER,
+    )
+    window._last_write_access = True
+    monkeypatch.setattr(window._hotkeys, "foreground_pid", lambda: identity.pid)
+    monkeypatch.setattr(
+        ConfirmDialog,
+        "exec",
+        lambda _dialog: QDialog.DialogCode.Accepted,
+    )
+    window.toggle_overlay()
+
+    assert window.overlay.trainer_combo.currentData() == trick.id
+    assert t("overlay.trainer.active") in window.overlay.trainer_info.text()
+    qtbot.mouseClick(window.overlay.trainer_toggle_button, Qt.MouseButton.LeftButton)
+    assert controller.list_trainer_tricks()[0].active is False
+    assert controller.list_watches()[0].frozen is False
+    assert window.overlay.operation_status.text() == t("overlay.trainer.deactivated")
+
+    qtbot.mouseClick(window.overlay.trainer_toggle_button, Qt.MouseButton.LeftButton)
+    assert controller.list_trainer_tricks()[0].active is True
+    assert controller.list_watches()[0].frozen is True
+    assert window.overlay.operation_status.text() == t("overlay.trainer.activated")
+
+    window._last_write_access = False
+    window.overlay.show_for_process(identity, False, controller.list_watches())
+    assert not window.overlay.trainer_toggle_button.isEnabled()
     window.close()
 
 

@@ -14,9 +14,10 @@ from mempilot.app import create_app
 from mempilot.config.settings import AISettings, Settings
 from mempilot.controller import AppController
 from mempilot.core.backend import Architecture, ProcessIdentity
+from mempilot.i18n import t
 from mempilot.services.audit_service import AuditService
 from mempilot.services.settings_service import SettingsService
-from mempilot.ui.widgets.chat_panel import AutonomousConsentDialog
+from mempilot.ui.widgets.chat_panel import AutonomousConsentDialog, ChatPanel
 
 pytestmark = pytest.mark.gui
 
@@ -55,6 +56,18 @@ def test_no_ai_factory_keeps_manual_application_enabled(
     assert window.chat_panel.history[0] == ("user", "Consulta local")
     assert window.chat_panel.history[1][0] == "agent"
     window.close()
+
+
+def test_trainer_creator_submits_guided_agent_prompt(qtbot: QtBot) -> None:
+    panel = ChatPanel(ai_enabled=True)
+    qtbot.addWidget(panel)
+    panel.show()
+
+    with qtbot.waitSignal(panel.message_submitted, timeout=1000) as submitted:
+        panel.trainer_button.click()
+
+    assert submitted.args == [t("chat.trainer_prompt")]
+    assert panel.history[-1] == ("user", t("chat.trainer_prompt"))
 
 
 def test_autonomous_dialog_requires_explicit_checked_consent(qtbot: QtBot) -> None:

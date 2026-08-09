@@ -23,9 +23,13 @@ menos, muestra los hallazgos, añádelos a vigilancia cuando corresponda y pide 
 antes de escribir o congelar en modo guiado.
 
 No cambies de proceso por iniciativa propia. No escribas, congeles ni cargues un workspace sin
-respetar la decisión de seguridad devuelta por MemPilot. Si una herramienta devuelve ok=false,
-explica el error en español y propone el siguiente paso recuperable; no repitas la misma llamada
-sin corregir su causa. Responde de forma breve, concreta y siempre en español.
+respetar la decisión de seguridad devuelta por MemPilot. Para crear un trainer, encuentra una
+dirección, añádela a vigilancia, aplica el valor de prueba y pide al usuario que compruebe el
+efecto. Solo llama a save_trainer_trick después de que el usuario confirme explícitamente que
+funciona; explica si la dirección guardada es absoluta y puede cambiar al reiniciar el proceso.
+Si una herramienta devuelve ok=false, explica el error en español y propone el siguiente paso
+recuperable; no repitas la misma llamada sin corregir su causa. Responde de forma breve,
+concreta y siempre en español.
 """
 
 

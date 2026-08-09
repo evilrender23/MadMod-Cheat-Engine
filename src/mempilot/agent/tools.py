@@ -25,6 +25,7 @@ from mempilot.agent.schemas import (
     GetScanStatusArgs,
     ListProcessesArgs,
     ListScanResultsArgs,
+    ListTrainerTricksArgs,
     ListWatchesArgs,
     LoadWorkspaceArgs,
     OperationResult,
@@ -33,12 +34,16 @@ from mempilot.agent.schemas import (
     ReadAddressArgs,
     RefineScanArgs,
     RemoveWatchArgs,
+    SaveTrainerTrickArgs,
     SaveWorkspaceArgs,
     ScanResultRow,
     ScanResultsResult,
     ScanStartedResult,
     ScanStatusResult,
     StartScanArgs,
+    TrainerTrickListResult,
+    TrainerTrickResult,
+    TrainerTrickSavedResult,
     UnfreezeWatchArgs,
     WatchAddedResult,
     WatchListResult,
@@ -54,6 +59,7 @@ from mempilot.core.exceptions import MemPilotError
 from mempilot.core.scan_session import FilterSpec, OrderSpec
 from mempilot.core.scanner import ScanOptions, ScanRequest
 from mempilot.core.watcher import WatchEntry, WatchSpec
+from mempilot.services.trainer_service import TrainerTrickState
 
 _MAX_ROWS = 200
 _MAX_JSON_BYTES = 8 * 1024
@@ -70,6 +76,7 @@ class ToolDef:
     mutating: bool
     requires_attached: bool
     allowed_states: frozenset[FlowState] | None
+    always_confirm: bool = False
 
 
 class ToolRegistry:
@@ -282,6 +289,26 @@ class ToolRegistry:
                 False,
                 True,
                 attached_states,
+            ),
+            ToolDef(
+                "list_trainer_tricks",
+                "Lista los trucos guardados para el proceso adjunto y su estado actual.",
+                ListTrainerTricksArgs,
+                self._list_trainer_tricks,
+                False,
+                True,
+                attached_states,
+            ),
+            ToolDef(
+                "save_trainer_trick",
+                "Guarda como trainer una vigilancia ya probada. Llámala únicamente después "
+                "de que el usuario diga que el truco funciona; siempre exige confirmación.",
+                SaveTrainerTrickArgs,
+                self._save_trainer_trick,
+                True,
+                True,
+                attached_states,
+                always_confirm=True,
             ),
             ToolDef(
                 "write_watch",
@@ -531,6 +558,46 @@ class ToolRegistry:
             ),
         )
 
+    def _list_trainer_tricks(self, base: BaseModel) -> BaseModel:
+        cast(ListTrainerTricksArgs, base)
+        identity = self.controller.attached_identity()
+        if identity is None:
+            raise ValueError("No hay ningún proceso adjunto.")
+        states = self.controller.list_trainer_tricks(Actor.AGENT)
+        return TrainerTrickListResult(
+            ok=True,
+            process_name=_clip(identity.name),
+            tricks=[_trainer_trick_result(state) for state in states],
+            count=len(states),
+        )
+
+    def _save_trainer_trick(self, base: BaseModel) -> BaseModel:
+        args = cast(SaveTrainerTrickArgs, base)
+        identity = self.controller.attached_identity()
+        if identity is None:
+            raise ValueError("No hay ningún proceso adjunto.")
+        interval_ms = 100 if args.interval_ms is None else args.interval_ms
+        trick = self.controller.save_trainer_trick(
+            args.watch_id,
+            name=args.name,
+            enabled_value=args.enabled_value,
+            disabled_value=args.disabled_value,
+            mode=args.mode,
+            interval_ms=interval_ms,
+            notes=args.notes or "",
+            actor=Actor.AGENT,
+        )
+        state = next(
+            item
+            for item in self.controller.list_trainer_tricks(Actor.AGENT)
+            if item.trick.id == trick.id
+        )
+        return TrainerTrickSavedResult(
+            ok=True,
+            process_name=_clip(identity.name),
+            trick=_trainer_trick_result(state),
+        )
+
     def _write_watch(self, base: BaseModel) -> BaseModel:
         args = cast(WriteWatchArgs, base)
         self.controller.set_watch_value(args.watch_id, args.value, Actor.AGENT)
@@ -592,6 +659,21 @@ def _watch_result(entry: WatchEntry) -> WatchResult:
         desired_value=_clip_optional(entry.desired_value),
         current_value=_clip(entry.current_value),
         last_error=_clip_optional(entry.last_error),
+    )
+
+
+def _trainer_trick_result(state: TrainerTrickState) -> TrainerTrickResult:
+    trick = state.trick
+    return TrainerTrickResult(
+        id=_clip(trick.id, 64),
+        name=_clip(trick.name),
+        data_type=trick.data_type.value,
+        mode=trick.mode.value,
+        enabled_value=_clip(trick.enabled_value),
+        disabled_value=_clip_optional(trick.disabled_value),
+        interval_ms=trick.interval_ms,
+        notes=_clip(trick.notes),
+        active=state.active,
     )
 
 

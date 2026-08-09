@@ -452,6 +452,16 @@ class AgentOrchestrator(QObject):
             current = watch.current_value if watch is not None else "desconocido"
             value = str(args.get("value", ""))
             return f"{invocation.name}: {label}\nValor actual: {current}\nValor nuevo: {value}"
+        if invocation.name == "save_trainer_trick":
+            identity = self.controller.attached_identity()
+            process_name = identity.name if identity is not None else "desconocido"
+            return (
+                "¿Confirmas que el truco funciona y quieres guardarlo?\n"
+                f"Proceso: {process_name}\n"
+                f"Truco: {args.get('name', '')}\n"
+                f"Activado: {args.get('enabled_value', '')}\n"
+                f"Desactivado: {args.get('disabled_value') or 'descongelar'}"
+            )
         if invocation.name == "attach_process":
             return (
                 f"Adjuntar al PID {args.get('pid')} con permiso de escritura: "

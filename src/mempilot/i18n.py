@@ -195,6 +195,11 @@ STRINGS: dict[str, str] = {
     "chat.writes": "Escrituras {used}/{limit}",
     "chat.input": "Escribe una consulta para el asistente",
     "chat.send": "Enviar",
+    "chat.trainer_creator": "Crear trainer con IA",
+    "chat.trainer_prompt": (
+        "Quiero crear un trainer para el proceso actual. Guíame para encontrar y probar "
+        "un truco, y ofréceme guardarlo solo después de que confirme que funciona."
+    ),
     "chat.disabled_help": (
         "La inspección manual sigue disponible. Instala e inicia sesión en Antigravity CLI, "
         "Codex CLI o Claude Code y selecciónala en Ajustes → IA."
@@ -214,6 +219,20 @@ STRINGS: dict[str, str] = {
     "overlay.no_process": "No hay un proceso adjunto.",
     "overlay.process": "{name} · PID {pid} · {access}",
     "overlay.manual": "Ajustes manuales",
+    "overlay.trainers": "Trucos guardados",
+    "overlay.trainer": "Truco",
+    "overlay.no_trainers": "Aún no hay trucos guardados para {name}.",
+    "overlay.trainer_info": "Tipo: {type} · Modo: {mode} · Estado: {state}",
+    "overlay.trainer.active": "activo",
+    "overlay.trainer.inactive": "inactivo",
+    "overlay.trainer.mode.freeze": "congelado",
+    "overlay.trainer.mode.write_pair": "valor reversible",
+    "overlay.trainer.activate": "Activar",
+    "overlay.trainer.deactivate": "Desactivar",
+    "overlay.trainer.activate_confirm": "Activar el truco guardado «{name}»",
+    "overlay.trainer.deactivate_confirm": "Desactivar el truco guardado «{name}»",
+    "overlay.trainer.activated": "Truco activado.",
+    "overlay.trainer.deactivated": "Truco desactivado.",
     "overlay.watch": "Vigilancia",
     "overlay.value": "Valor nuevo o deseado",
     "overlay.no_watches": "Añade una dirección a vigilancia desde MemPilot para ajustarla aquí.",
