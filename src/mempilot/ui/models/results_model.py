@@ -181,7 +181,7 @@ class ResultsModel(QAbstractTableModel):
         self._controller.set_visible_results(self._rows)
 
     def update_live_values(self, values: object) -> None:
-        """Apply scheduler values in O(number of delivered values)."""
+        """Apply scheduler values without triggering per-row table relayouts."""
         if not isinstance(values, dict):
             return
         changed: list[int] = []
@@ -191,11 +191,14 @@ class ResultsModel(QAbstractTableModel):
             row_number = self._address_rows.get(raw_address)
             if row_number is None:
                 continue
-            self._rows[row_number].current = str(raw_value)
+            value = str(raw_value)
+            if self._rows[row_number].current == value:
+                continue
+            self._rows[row_number].current = value
             changed.append(row_number)
-        for row_number in changed:
-            left = self.index(row_number, 1)
-            right = self.index(row_number, 1)
+        if changed:
+            left = self.index(min(changed), 1)
+            right = self.index(max(changed), 1)
             self.dataChanged.emit(left, right, [int(Qt.ItemDataRole.DisplayRole)])
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex = _ROOT_INDEX) -> int:
