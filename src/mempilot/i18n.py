@@ -26,7 +26,7 @@ STRINGS: dict[str, str] = {
     "scan.unknown_skipped": (
         "Se omitieron {count} regiones (límite de {limit} MB). Auméntalo en Ajustes → Escaneo."
     ),
-    "agent.disabled": "IA desactivada — configura la clave en Ajustes → IA",
+    "agent.disabled": "IA desactivada — configura una CLI compatible en Ajustes → IA",
     "agent.autonomous": "MODO AUTÓNOMO ACTIVO — proceso {name} (PID {pid})",
     "error.title": "No se pudo completar la operación",
     "error.details": "Detalles",
@@ -196,8 +196,8 @@ STRINGS: dict[str, str] = {
     "chat.input": "Escribe una consulta para el asistente",
     "chat.send": "Enviar",
     "chat.disabled_help": (
-        "La inspección manual sigue disponible. Añade una clave desde Ajustes para activar "
-        "el asistente."
+        "La inspección manual sigue disponible. Instala e inicia sesión en Antigravity CLI, "
+        "Codex CLI o Claude Code y selecciónala en Ajustes → IA."
     ),
     "chat.offline_reply": (
         "La IA está desactivada. Puedes seguir usando escaneos, resultados y vigilancia."
@@ -206,6 +206,31 @@ STRINGS: dict[str, str] = {
     "chat.user": "Tú",
     "chat.agent": "Asistente",
     "chat.thinking": "Pensando…",
+    "overlay.title": "MemPilot Overlay",
+    "overlay.hide": "Ocultar",
+    "overlay.hotkey_hint": "Ocultar: Pause, Ctrl+Shift+º o Esc",
+    "overlay.history": "Conversación del overlay",
+    "overlay.chat_input": "Habla con MemPilot",
+    "overlay.no_process": "No hay un proceso adjunto.",
+    "overlay.process": "{name} · PID {pid} · {access}",
+    "overlay.manual": "Ajustes manuales",
+    "overlay.watch": "Vigilancia",
+    "overlay.value": "Valor nuevo o deseado",
+    "overlay.no_watches": "Añade una dirección a vigilancia desde MemPilot para ajustarla aquí.",
+    "overlay.watch_info": "Tipo: {type} · Actual: {current} · Congelado: {frozen}",
+    "overlay.yes": "sí",
+    "overlay.no": "no",
+    "overlay.write": "Escribir",
+    "overlay.freeze": "Congelar",
+    "overlay.unfreeze": "Descongelar",
+    "overlay.read_only": "Vuelve a adjuntar el proceso con permiso de escritura.",
+    "overlay.write_confirm": "Escribir una vigilancia desde el overlay",
+    "overlay.freeze_confirm": "Congelar una vigilancia desde el overlay",
+    "overlay.write_ok": "Valor escrito correctamente.",
+    "overlay.freeze_ok": "Vigilancia congelada.",
+    "overlay.unfreeze_ok": "Vigilancia descongelada.",
+    "overlay.hotkey_failed": "No se pudo registrar el atajo global: {shortcuts}.",
+    "overlay.hotkey_ready": "Overlay disponible desde {name}: Pause o Ctrl+Shift+º.",
     "chat.autonomous.title": "Activar modo autónomo",
     "chat.autonomous.permissions": (
         "Permisos concedidos para {name} (PID {pid}):\n"
@@ -229,10 +254,15 @@ STRINGS: dict[str, str] = {
     "settings.watch_refresh": "Refresco de vigilancia (ms)",
     "settings.show_system": "Mostrar procesos del sistema",
     "settings.ai_enabled": "Activar asistente de IA",
-    "settings.model": "Modelo",
-    "settings.base_url": "URL base opcional",
+    "settings.provider": "Proveedor CLI",
+    "settings.executable": "Ejecutable opcional",
+    "settings.executable_hint": "Vacío: buscar agy, codex o claude en PATH",
+    "settings.cli_status": "Estado",
+    "settings.cli_found": "CLI detectada: {path}",
+    "settings.cli_missing": "No se encontró «{command}» en PATH.",
+    "settings.model": "Modelo opcional",
+    "settings.model_hint": "Vacío: usar el modelo predeterminado de la CLI",
     "settings.timeout": "Tiempo de espera (s)",
-    "settings.retries": "Reintentos",
     "settings.write_limit": "Límite de escrituras autónomas",
     "settings.save": "Guardar ajustes",
     "settings.saved": "Los ajustes se guardaron.",
@@ -394,7 +424,8 @@ STRINGS: dict[str, str] = {
     "help.body": (
         "Selecciona un proceso autorizado, elige tipo y condición, y usa F5 para el primer "
         "escaneo. Cambia el valor en el proceso y usa F6 para refinar. Ctrl+W añade el "
-        "resultado seleccionado a vigilancia. Esc cancela un escaneo activo."
+        "resultado seleccionado a vigilancia. Esc cancela un escaneo activo. Con el proceso "
+        "adjunto en primer plano, Pause o Ctrl+Shift+º abre el overlay de chat y ajustes."
     ),
     "lab.attach_question": ("¿Adjuntarse a Memory Lab (PID {pid}) con permiso de escritura?"),
     "lab.launch_failed": "No se pudo iniciar Memory Lab.",

@@ -10,3 +10,5 @@ __pycache__/
 .ruff_cache/
 workspaces/
 *.egg-info/
+/MadMod MemPilot/
+/wonderia-state.png

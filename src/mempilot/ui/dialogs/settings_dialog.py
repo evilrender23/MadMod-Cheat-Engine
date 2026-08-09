@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
+    QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
@@ -16,7 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from mempilot.config.settings import Settings
+from mempilot.agent.providers import find_cli_executable
+from mempilot.config.settings import CLIBackend, Settings
 from mempilot.i18n import t
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
@@ -113,29 +116,57 @@ class SettingsDialog(QDialog):
         self.ai_enabled.setAccessibleName(t("settings.ai_enabled"))
         self.ai_enabled.setChecked(self.settings.ai.enabled)
         form.addRow("", self.ai_enabled)
-        self.model_edit = QLineEdit(self.settings.ai.model, page)
+        self.provider_combo = QComboBox(page)
+        self.provider_combo.setAccessibleName(t("settings.provider"))
+        self.provider_combo.addItem("Antigravity CLI (agy)", CLIBackend.ANTIGRAVITY.value)
+        self.provider_combo.addItem("Codex CLI (codex)", CLIBackend.CODEX.value)
+        self.provider_combo.addItem("Claude Code (claude)", CLIBackend.CLAUDE.value)
+        provider_index = self.provider_combo.findData(self.settings.ai.provider.value)
+        self.provider_combo.setCurrentIndex(max(0, provider_index))
+        form.addRow(t("settings.provider"), self.provider_combo)
+        self.executable_edit = QLineEdit(self.settings.ai.executable or "", page)
+        self.executable_edit.setAccessibleName(t("settings.executable"))
+        self.executable_edit.setPlaceholderText(t("settings.executable_hint"))
+        form.addRow(t("settings.executable"), self.executable_edit)
+        self.cli_status = QLabel("", page)
+        self.cli_status.setWordWrap(True)
+        form.addRow(t("settings.cli_status"), self.cli_status)
+        self.model_edit = QLineEdit(self.settings.ai.model or "", page)
         self.model_edit.setAccessibleName(t("settings.model"))
+        self.model_edit.setPlaceholderText(t("settings.model_hint"))
         form.addRow(t("settings.model"), self.model_edit)
-        self.base_url_edit = QLineEdit(self.settings.ai.base_url or "", page)
-        self.base_url_edit.setAccessibleName(t("settings.base_url"))
-        form.addRow(t("settings.base_url"), self.base_url_edit)
         self.timeout_spin = QDoubleSpinBox(page)
         self.timeout_spin.setAccessibleName(t("settings.timeout"))
-        self.timeout_spin.setRange(0.1, 3600.0)
+        self.timeout_spin.setRange(5.0, 3600.0)
         self.timeout_spin.setValue(self.settings.ai.timeout_s)
         self.timeout_spin.setSuffix(" s")
         form.addRow(t("settings.timeout"), self.timeout_spin)
-        self.retries_spin = QSpinBox(page)
-        self.retries_spin.setAccessibleName(t("settings.retries"))
-        self.retries_spin.setRange(0, 20)
-        self.retries_spin.setValue(self.settings.ai.max_retries)
-        form.addRow(t("settings.retries"), self.retries_spin)
         self.write_limit = QSpinBox(page)
         self.write_limit.setAccessibleName(t("settings.write_limit"))
         self.write_limit.setRange(0, 100_000)
         self.write_limit.setValue(self.settings.ai.autonomous_write_limit)
         form.addRow(t("settings.write_limit"), self.write_limit)
+        self.provider_combo.currentIndexChanged.connect(self._refresh_cli_status)
+        self.executable_edit.textChanged.connect(self._refresh_cli_status)
+        self._refresh_cli_status()
         return page
+
+    def _refresh_cli_status(self, *_args: object) -> None:
+        ai = self.settings.ai.model_copy(
+            update={
+                "provider": CLIBackend(str(self.provider_combo.currentData())),
+                "executable": self.executable_edit.text().strip() or None,
+            }
+        )
+        executable = find_cli_executable(ai)
+        if executable is None:
+            self.cli_status.setText(t("settings.cli_missing", command=ai.provider.value))
+            self.cli_status.setProperty("tone", "warning")
+        else:
+            self.cli_status.setText(t("settings.cli_found", path=executable))
+            self.cli_status.setProperty("tone", "success")
+        self.cli_status.style().unpolish(self.cli_status)
+        self.cli_status.style().polish(self.cli_status)
 
     def _save(self) -> None:
         updated = self.settings.model_copy(deep=True)
@@ -146,10 +177,10 @@ class SettingsDialog(QDialog):
         updated.ui.watch_refresh_ms = self.watch_refresh.value()
         updated.ui.show_system_processes = self.show_system.isChecked()
         updated.ai.enabled = self.ai_enabled.isChecked()
-        updated.ai.model = self.model_edit.text().strip() or "gpt-4.1"
-        updated.ai.base_url = self.base_url_edit.text().strip() or None
+        updated.ai.provider = CLIBackend(str(self.provider_combo.currentData()))
+        updated.ai.executable = self.executable_edit.text().strip() or None
+        updated.ai.model = self.model_edit.text().strip() or None
         updated.ai.timeout_s = self.timeout_spin.value()
-        updated.ai.max_retries = self.retries_spin.value()
         updated.ai.autonomous_write_limit = self.write_limit.value()
         try:
             self._service.save(updated)

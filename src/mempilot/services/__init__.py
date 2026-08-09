@@ -1,1 +1,1 @@
-"""Persistence, credentials, and audit services."""
+"""Persistence, settings, and audit services."""

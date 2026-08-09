@@ -18,7 +18,7 @@ MemPilot separa presentación, fachada, dominio y acceso Win32. `AppController` 
 - Lecturas parciales: el escáner acepta copias parciales y descarta zonas ilegibles.
 - Volumen de candidatos: paginación NumPy y límite explícito, sin truncado silencioso.
 - Escrituras del agente: confirmación guiada o límite autónomo ligado al proceso.
-- Empaquetado Qt/keyring: `--onedir`, backend Windows explícito y prueba del binario.
+- Empaquetado Qt/CLIs externas: `--onedir`, detección por `PATH`, backend Windows explícito y prueba del binario.
 
 ## Estrategia de pruebas
 

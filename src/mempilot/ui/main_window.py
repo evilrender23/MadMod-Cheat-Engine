@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QSettings, Qt, Slot
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QInputDialog,
     QMainWindow,
@@ -21,19 +22,22 @@ from mempilot.agent.orchestrator import (
     ConfirmationRequest,
 )
 from mempilot.agent.policies import AgentMode
+from mempilot.agent.providers import create_cli_provider
 from mempilot.config.settings import Settings
 from mempilot.controller import Actor, AppController
 from mempilot.core.data_types import DataType, format_hex
 from mempilot.core.exceptions import MemPilotError
 from mempilot.core.scan_session import CandidateRow, ScanSession, SessionState
 from mempilot.core.scanner import ScanProgress, ScanRequest
-from mempilot.core.watcher import WatchSpec
+from mempilot.core.watcher import WatchEntry, WatchSpec
 from mempilot.i18n import t
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.attach_dialog import AttachDialog
 from mempilot.ui.dialogs.confirm_dialog import ConfirmDialog
 from mempilot.ui.dialogs.error_dialog import ErrorDialog
 from mempilot.ui.dialogs.settings_dialog import SettingsDialog
+from mempilot.ui.hotkeys import GlobalHotkeys, HotkeyEventFilter
+from mempilot.ui.overlay import OverlayWindow
 from mempilot.ui.widgets.chat_panel import AutonomousConsentDialog, ChatPanel
 from mempilot.ui.widgets.results_view import ResultsView
 from mempilot.ui.widgets.scan_panel import ScanPanel
@@ -62,6 +66,13 @@ class MainWindow(QMainWindow):
         self._layout_settings = QSettings("MemPilot", "MemPilot")
         self._write_confirmation_enabled = True
         self._last_write_access = False
+        self.overlay = OverlayWindow()
+        self._hotkeys = GlobalHotkeys()
+        self._hotkeys_registered = False
+        self._hotkey_filter = HotkeyEventFilter(self._hotkeys, self.toggle_overlay)
+        application = QApplication.instance()
+        if application is not None:
+            application.installNativeEventFilter(self._hotkey_filter)
         self.setWindowTitle(t("app.name"))
         self.setMinimumSize(1280, 720)
         self.resize(1760, 1000)
@@ -131,13 +142,20 @@ class MainWindow(QMainWindow):
         self.results_view.error_raised.connect(self.show_error)
         self.watch_view.workspace_saved.connect(self._workspace_saved)
         self.watch_view.workspace_loaded.connect(self._workspace_loaded)
+        self.overlay.message_submitted.connect(self._submit_overlay_message)
+        self.overlay.write_requested.connect(self._overlay_write_watch)
+        self.overlay.freeze_requested.connect(self._overlay_set_freeze)
         if self.orchestrator is not None:
             self.chat_panel.message_submitted.connect(self._submit_agent_message)
+            self.chat_panel.message_submitted.connect(self._mirror_main_user_in_overlay)
             self.chat_panel.mode_changed.connect(self._request_agent_mode)
             self.orchestrator.response_ready.connect(self.chat_panel.add_agent_message)
+            self.orchestrator.response_ready.connect(self.overlay.add_agent_message)
             self.orchestrator.activity.connect(self.chat_panel.add_activity)
+            self.orchestrator.activity.connect(self.overlay.add_activity)
             self.orchestrator.confirmation_requested.connect(self._show_agent_confirmation)
             self.orchestrator.busy_changed.connect(self.chat_panel.set_busy)
+            self.orchestrator.busy_changed.connect(self.overlay.set_busy)
             self.orchestrator.mode_changed.connect(self.chat_panel.set_mode)
 
     def _connect_controller(self) -> None:
@@ -151,6 +169,7 @@ class MainWindow(QMainWindow):
         self.controller.scan_cancelled.connect(self._on_scan_cancelled)
         self.controller.watch_write_error.connect(self._on_watch_error)
         self.controller.autonomous_changed.connect(self._on_autonomous_changed)
+        self.controller.watches_changed.connect(self._refresh_overlay_watches)
 
     def _install_global_actions(self) -> None:
         specs = (
@@ -192,6 +211,16 @@ class MainWindow(QMainWindow):
             self.show_error(exc)
 
     @Slot(str)
+    def _submit_overlay_message(self, text: str) -> None:
+        self.chat_panel.add_user_message(text)
+        self._submit_agent_message(text)
+
+    @Slot(str)
+    def _mirror_main_user_in_overlay(self, text: str) -> None:
+        if self.overlay.isVisible():
+            self.overlay.add_user_message(text)
+
+    @Slot(str)
     def _request_agent_mode(self, raw_mode: str) -> None:
         if self.orchestrator is None:
             return
@@ -226,11 +255,132 @@ class MainWindow(QMainWindow):
     def _show_agent_confirmation(self, raw_request: object) -> None:
         if not isinstance(raw_request, ConfirmationRequest):
             return
-        self.chat_panel.show_confirmation(
-            raw_request.detail,
-            raw_request.confirm,
-            raw_request.reject,
+        if self.overlay.isVisible():
+            self.overlay.show_confirmation(
+                raw_request.detail,
+                raw_request.confirm,
+                raw_request.reject,
+            )
+        else:
+            self.chat_panel.show_confirmation(
+                raw_request.detail,
+                raw_request.confirm,
+                raw_request.reject,
+            )
+
+    @Slot()
+    def toggle_overlay(self) -> None:
+        """Toggle only when the attached process owns the foreground window."""
+        if self.overlay.isVisible():
+            self.overlay.hide()
+            return
+        identity = self.controller.attached_identity()
+        if identity is None or self._hotkeys.foreground_pid() != identity.pid:
+            return
+        self.overlay.set_ai_enabled(self.orchestrator is not None and self.orchestrator.available)
+        if self.orchestrator is None:
+            self.overlay.set_history(())
+        else:
+            self.overlay.set_history(
+                tuple(
+                    (message.role, message.text)
+                    for message in self.orchestrator.conversation.messages
+                )
+            )
+        self.overlay.show_for_process(
+            identity,
+            self._last_write_access,
+            self.controller.list_watches(),
         )
+
+    @Slot()
+    def _refresh_overlay_watches(self) -> None:
+        self.overlay.refresh_watches(self.controller.list_watches())
+
+    @Slot(str, str)
+    def _overlay_write_watch(self, watch_id: str, value: str) -> None:
+        if not self._overlay_mutations_allowed():
+            return
+        entry = self._watch_entry(watch_id)
+        if entry is None:
+            self.overlay.set_operation_result(t("overlay.no_watches"), error=True)
+            return
+        try:
+            address = self.controller.watch_address(watch_id, Actor.USER)
+            if self._write_confirmation_enabled:
+                confirmation = ConfirmDialog(
+                    action=t("overlay.write_confirm"),
+                    address=address,
+                    data_type=entry.data_type,
+                    current_value=entry.current_value,
+                    new_value=value,
+                    allow_remember=True,
+                    parent=self.overlay,
+                )
+                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                    return
+                if confirmation.remember_for_session:
+                    self._write_confirmation_enabled = False
+            self.controller.set_watch_value(watch_id, value, Actor.USER)
+        except Exception as exc:
+            self.overlay.set_operation_result(str(exc), error=True)
+            return
+        self.overlay.set_operation_result(t("overlay.write_ok"))
+        self._refresh_overlay_watches()
+
+    @Slot(str, str, bool)
+    def _overlay_set_freeze(self, watch_id: str, value: str, frozen: bool) -> None:
+        if not self._overlay_mutations_allowed():
+            return
+        entry = self._watch_entry(watch_id)
+        if entry is None:
+            self.overlay.set_operation_result(t("overlay.no_watches"), error=True)
+            return
+        try:
+            if frozen:
+                address = self.controller.watch_address(watch_id, Actor.USER)
+                confirmation = ConfirmDialog(
+                    action=t("overlay.freeze_confirm"),
+                    address=address,
+                    data_type=entry.data_type,
+                    current_value=entry.current_value,
+                    new_value=value,
+                    allow_remember=False,
+                    parent=self.overlay,
+                )
+                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                    return
+            self.controller.set_freeze(
+                watch_id,
+                frozen,
+                value if frozen else entry.desired_value,
+                entry.interval_ms,
+                Actor.USER,
+            )
+        except Exception as exc:
+            self.overlay.set_operation_result(str(exc), error=True)
+            return
+        self.overlay.set_operation_result(
+            t("overlay.freeze_ok") if frozen else t("overlay.unfreeze_ok")
+        )
+        self._refresh_overlay_watches()
+
+    def _watch_entry(self, watch_id: str) -> WatchEntry | None:
+        return next(
+            (entry for entry in self.controller.list_watches() if entry.id == watch_id),
+            None,
+        )
+
+    def _overlay_mutations_allowed(self) -> bool:
+        current = self.controller.attached_identity()
+        bound = self.overlay.bound_identity
+        if current is None or bound is None or not current.matches(bound):
+            self.overlay.set_operation_result(t("overlay.no_process"), error=True)
+            return False
+        if not self._last_write_access:
+            self.overlay.set_operation_result(t("overlay.read_only"), error=True)
+            return False
+        return True
 
     @Slot()
     def select_process(self) -> None:
@@ -377,7 +527,7 @@ class MainWindow(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
-        if answer is not QMessageBox.StandardButton.Yes:
+        if answer != QMessageBox.StandardButton.Yes:
             return
         try:
             identity = self.controller.attach(pid, True, Actor.USER)
@@ -392,10 +542,24 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def open_settings(self) -> None:
+        if self.orchestrator is not None and self.orchestrator.busy:
+            self.show_error(
+                MemPilotError(
+                    "Espera a que termine la respuesta actual antes de cambiar los ajustes."
+                )
+            )
+            return
         dialog = SettingsDialog(self.settings, self.settings_service, self)
-        if dialog.exec() is QDialog.DialogCode.Accepted:
-            self.settings = dialog.settings
-            self.status_strip.set_message(t("settings.saved"), "success")
+        if dialog.exec() is not QDialog.DialogCode.Accepted:
+            return
+        self.settings = dialog.settings
+        if self.orchestrator is not None:
+            provider = create_cli_provider(self.settings.ai)
+            self.orchestrator.configure_provider(provider, self.settings.ai)
+            self.chat_panel.set_ai_enabled(self.orchestrator.available)
+            self.chat_panel.set_mode(self.orchestrator.policy.mode.value)
+            self.overlay.set_ai_enabled(self.orchestrator.available)
+        self.status_strip.set_message(t("settings.saved"), "success")
 
     @Slot()
     def show_help(self) -> None:
@@ -417,6 +581,8 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def _on_detached(self, reason: str) -> None:
+        self._last_write_access = False
+        self.overlay.hide()
         self.top_bar.set_detached()
         self.scan_panel.set_session_state(SessionState.NEW, False)
         self.results_view.clear()
@@ -425,6 +591,8 @@ class MainWindow(QMainWindow):
 
     @Slot(int)
     def _on_process_lost(self, pid: int) -> None:
+        self._last_write_access = False
+        self.overlay.hide()
         self.status_strip.finish_scan(t("status.process_lost", pid=pid), "error")
 
     @Slot(object)
@@ -520,8 +688,25 @@ class MainWindow(QMainWindow):
         )
         self._layout_settings.sync()
 
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        if self._hotkeys_registered:
+            return
+        failed = self._hotkeys.register(int(self.winId()))
+        self._hotkeys_registered = True
+        if failed:
+            self.status_strip.set_message(
+                t("overlay.hotkey_failed", shortcuts=", ".join(failed)),
+                "warning",
+            )
+
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Persist layout and shut down every worker before accepting close."""
+        """Persist layout, release hotkeys, and shut down every worker."""
+        application = QApplication.instance()
+        if application is not None:
+            application.removeNativeEventFilter(self._hotkey_filter)
         self._save_layout()
+        self._hotkeys.unregister()
+        self.overlay.close()
         self.controller.shutdown()
         event.accept()

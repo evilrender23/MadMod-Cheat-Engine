@@ -13,12 +13,12 @@ _HANDLER_NAME = "mempilot_rotating_file"
 
 
 def redact_secrets(text: str) -> str:
-    """Replace OpenAI-style secret keys in text with a safe marker."""
+    """Replace credential-shaped secret keys in text with a safe marker."""
     return _SECRET_PATTERN.sub("***", text)
 
 
 class SecretRedactionFilter(logging.Filter):
-    """Redact OpenAI-style secret keys from log messages and arguments."""
+    """Redact credential-shaped strings from log messages and arguments."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         record.msg = _redact(record.msg)

@@ -420,3 +420,46 @@ def test_flow_machine_detach_and_process_lost_reset_to_no_process() -> None:
     assert machine.state is FlowState.ATTACHED
     controller.process_lost.emit(7)
     assert machine.state is FlowState.NO_PROCESS
+
+
+def test_provider_reconfiguration_revokes_autonomous_permission() -> None:
+    controller = _Controller()
+    registry = _Registry(controller)
+    policy = AgentPolicy(
+        AgentMode.AUTONOMOUS,
+        write_limit=20,
+        writes_used=3,
+        bound_identity=controller.identity,
+    )
+    orchestrator = AgentOrchestrator(
+        controller,  # type: ignore[arg-type]
+        registry,  # type: ignore[arg-type]
+        policy,
+        ScriptedProvider([]),
+        AISettings(),
+    )
+    autonomous_events: list[tuple[bool, int, int]] = []
+    controller.autonomous_changed.connect(
+        lambda enabled, used, limit: autonomous_events.append((enabled, used, limit))
+    )
+
+    orchestrator.configure_provider(
+        None,
+        AISettings(enabled=False, autonomous_write_limit=4),
+    )
+
+    assert orchestrator.provider is None
+    assert policy.mode is AgentMode.OFF
+    assert policy.writes_used == 0
+    assert policy.write_limit == 4
+    assert autonomous_events[-1] == (False, 0, 4)
+
+    replacement = ScriptedProvider([])
+    orchestrator.configure_provider(
+        replacement,
+        AISettings(autonomous_write_limit=6),
+    )
+
+    assert orchestrator.provider is replacement
+    assert policy.mode is AgentMode.GUIDED
+    assert policy.write_limit == 6

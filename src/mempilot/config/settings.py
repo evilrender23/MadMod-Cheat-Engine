@@ -1,5 +1,6 @@
 """Validated application settings models."""
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -35,16 +36,24 @@ class UISettings(BaseModel):
     show_system_processes: bool = False
 
 
+class CLIBackend(StrEnum):
+    """Supported authenticated command-line AI providers."""
+
+    ANTIGRAVITY = "agy"
+    CODEX = "codex"
+    CLAUDE = "claude"
+
+
 class AISettings(BaseModel):
-    """Persistent provider settings; credentials are deliberately excluded."""
+    """Persistent CLI provider settings; API credentials are never accepted."""
 
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
-    model: str = "gpt-4.1"
-    base_url: str | None = None
-    timeout_s: float = Field(default=60.0, gt=0.0)
-    max_retries: int = Field(default=2, ge=0)
+    provider: CLIBackend = CLIBackend.CODEX
+    executable: str | None = None
+    model: str | None = None
+    timeout_s: float = Field(default=180.0, gt=0.0)
     autonomous_write_limit: int = Field(default=20, ge=0)
     confirmation_timeout_s: float = Field(default=120.0, gt=0.0)
 
@@ -54,7 +63,7 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     scan: ScanSettings = Field(default_factory=ScanSettings)
     ui: UISettings = Field(default_factory=UISettings)
     ai: AISettings = Field(default_factory=AISettings)

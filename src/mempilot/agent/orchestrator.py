@@ -259,6 +259,21 @@ class AgentOrchestrator(QObject):
     def busy(self) -> bool:
         return self._busy
 
+    def configure_provider(self, provider: AIProvider | None, settings: AISettings) -> None:
+        """Apply a CLI provider change and revoke any prior autonomous grant."""
+        if self._busy:
+            raise ProviderError(
+                "Espera a que termine la respuesta actual antes de cambiar el proveedor."
+            )
+        self.provider = provider
+        self.settings = settings.model_copy(deep=True)
+        self.policy.write_limit = settings.autonomous_write_limit
+        self.policy.writes_used = 0
+        self.policy.mode = AgentMode.GUIDED if provider is not None else AgentMode.OFF
+        self._autonomous_identity = None
+        self.controller.autonomous_changed.emit(False, 0, self.policy.write_limit)
+        self.mode_changed.emit(self.policy.mode.value)
+
     def submit(self, text: str) -> bool:
         """Start one worker job; return False when unavailable or already busy."""
         normalized = text.strip()

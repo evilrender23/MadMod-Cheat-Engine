@@ -9,12 +9,11 @@ from PySide6.QtWidgets import QApplication
 from mempilot import __version__
 from mempilot.agent.orchestrator import AgentOrchestrator
 from mempilot.agent.policies import AgentMode, AgentPolicy
-from mempilot.agent.providers import AIProvider, OpenAIResponsesProvider
+from mempilot.agent.providers import AIProvider, create_cli_provider
 from mempilot.agent.tools import ToolRegistry
 from mempilot.config.paths import ensure_dirs
 from mempilot.config.settings import Settings
 from mempilot.controller import AppController
-from mempilot.services.credentials import resolve_api_key
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.main_window import MainWindow
 from mempilot.ui.theme import apply_theme
@@ -64,12 +63,7 @@ def create_app(
         policy.bound_identity = identity
     effective_provider = provider if effective_settings.ai.enabled else None
     if effective_provider is None and effective_settings.ai.enabled:
-        try:
-            api_key = resolve_api_key()
-        except Exception:
-            api_key = None
-        if api_key:
-            effective_provider = OpenAIResponsesProvider(api_key, effective_settings.ai)
+        effective_provider = create_cli_provider(effective_settings.ai)
     if effective_provider is None:
         policy.mode = AgentMode.OFF
     elif policy.mode is AgentMode.OFF:

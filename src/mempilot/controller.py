@@ -6,6 +6,7 @@ import logging
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import numpy as np
+import psutil
 from PySide6.QtCore import QMetaObject, QObject, Qt, QThread, Signal, Slot
 
 from mempilot.config.paths import repo_root
@@ -407,6 +409,15 @@ class AppController(QObject):
     def list_watches(self) -> list[WatchEntry]:
         return self._watches.entries()
 
+    def watch_address(self, watch_id: str, actor: Actor = Actor.USER) -> int:
+        """Resolve a watch through the guarded facade for an exact confirmation."""
+        self._require_attached(actor)
+        entry = self._watches.get(watch_id)
+        address, error = resolve_watch_address(entry, self._backend, self._safe_modules())
+        if address is None:
+            raise InvalidAddressError(error or "No se pudo resolver la vigilancia.")
+        return address
+
     def update_watch(
         self,
         watch_id: str,
@@ -542,8 +553,27 @@ class AppController(QObject):
         process = subprocess.Popen(
             command, creationflags=int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
         )
-        self._audit.record("user", "memory_lab_launch", f"pid:{process.pid}", "", "ok")
-        return int(process.pid)
+        expected_child = not getattr(sys, "frozen", False) and Path(
+            getattr(sys, "_base_executable", sys.executable)
+        ) != Path(sys.executable)
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                raise MemPilotError("Memory Lab terminó antes de mostrar su ventana.")
+            try:
+                children = psutil.Process(process.pid).children(recursive=True)
+            except psutil.Error:
+                children = []
+            if children:
+                pid = children[-1].pid
+                self._audit.record("user", "memory_lab_launch", f"pid:{pid}", "", "ok")
+                return int(pid)
+            if not expected_child and psutil.pid_exists(process.pid):
+                self._audit.record("user", "memory_lab_launch", f"pid:{process.pid}", "", "ok")
+                return int(process.pid)
+            time.sleep(0.05)
+        process.terminate()
+        raise MemPilotError("Memory Lab no mostró una ventana dentro de 10 segundos.")
 
     def start_agent_job(
         self,

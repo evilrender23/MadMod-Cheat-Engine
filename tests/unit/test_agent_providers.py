@@ -1,171 +1,213 @@
-"""Focused contracts for Step 3.2 provider payloads and local replay."""
+"""Focused contracts for isolated CLI providers and local conversation replay."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-from typing import Any, cast
+import json
+import subprocess
+from pathlib import Path
+from typing import Any
 
 import pytest
 
 import mempilot.agent.providers as providers_module
 from mempilot.agent.conversation import Conversation
 from mempilot.agent.providers import (
-    OpenAIResponsesProvider,
+    CLIProvider,
     ProviderTurn,
     ScriptedProvider,
     ToolCall,
+    create_cli_provider,
+    find_cli_executable,
 )
-from mempilot.config.settings import AISettings
+from mempilot.config.settings import AISettings, CLIBackend
 from mempilot.core.exceptions import ProviderError
 
-
-class _Responses:
-    def __init__(self, output: list[object], text: str = "") -> None:
-        self.output = output
-        self.text = text
-        self.payload: dict[str, object] | None = None
-
-    def create(self, **payload: object) -> object:
-        self.payload = payload
-        return SimpleNamespace(output=self.output, output_text=self.text)
-
-
-class _RaisingResponses:
-    def __init__(self, error: Exception) -> None:
-        self._error = error
-
-    def create(self, **payload: object) -> object:
-        del payload
-        raise self._error
+_TOOL_SPEC = {
+    "type": "function",
+    "name": "read_address",
+    "description": "Lee una dirección.",
+    "parameters": {
+        "type": "object",
+        "properties": {"address": {"type": "integer"}},
+        "required": ["address"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+_ENVELOPE = {
+    "text": "Leyendo.",
+    "tool_calls": [{"name": "read_address", "arguments_json": '{"address":4096}'}],
+}
 
 
-def test_openai_responses_provider_uses_exact_non_stored_flat_payload() -> None:
-    function_call = SimpleNamespace(
-        type="function_call",
-        call_id="call-1",
-        name="read_address",
-        arguments='{"address":4096,"data_type":"int32"}',
+def _provider_output(backend: CLIBackend) -> str:
+    if backend is CLIBackend.ANTIGRAVITY:
+        return json.dumps({"status": "SUCCESS", "structured_output": _ENVELOPE})
+    if backend is CLIBackend.CLAUDE:
+        return json.dumps({"is_error": False, "structured_output": _ENVELOPE})
+    return json.dumps(_ENVELOPE)
+
+
+@pytest.mark.parametrize("backend", list(CLIBackend))
+def test_cli_provider_runs_isolated_structured_turn_without_api_keys(
+    monkeypatch: pytest.MonkeyPatch,
+    backend: CLIBackend,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_run(command: list[str], **options: Any) -> subprocess.CompletedProcess[str]:
+        captured.update(command=command, **options)
+        if backend is CLIBackend.CODEX:
+            schema_path = Path(command[command.index("--output-schema") + 1])
+            assert schema_path.is_file()
+            assert (
+                json.loads(schema_path.read_text(encoding="utf-8"))["additionalProperties"] is False
+            )
+        return subprocess.CompletedProcess(command, 0, _provider_output(backend), "")
+
+    monkeypatch.setattr(providers_module.subprocess, "run", fake_run)
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-reach-child")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-reach-child")
+    provider = CLIProvider(
+        f"C:/tools/{backend.value}.exe",
+        AISettings(provider=backend, timeout_s=17.0),
     )
-    responses = _Responses([function_call], "Leyendo.")
-    client = SimpleNamespace(responses=responses)
-    settings = AISettings(model="gpt-4.1", timeout_s=7.0, max_retries=0)
-    provider = OpenAIResponsesProvider(
-        "sk-test-not-real-123456",
-        settings,
-        client=cast(Any, client),
+
+    turn = provider.complete(
+        "Instrucciones seguras",
+        [{"role": "user", "content": "Lee 0x1000"}],
+        [_TOOL_SPEC],
     )
-    tools = [
-        {
-            "type": "function",
-            "name": "read_address",
-            "description": "Lee una dirección.",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-                "required": [],
-                "additionalProperties": False,
-            },
-            "strict": True,
-        }
-    ]
-    input_items: list[Any] = [{"role": "user", "content": "Lee 0x1000"}]
 
-    turn = provider.complete("instrucciones", input_items, tools)
-
-    assert responses.payload == {
-        "model": "gpt-4.1",
-        "instructions": "instrucciones",
-        "input": input_items,
-        "tools": tools,
-        "parallel_tool_calls": False,
-        "store": False,
-        "max_output_tokens": 4096,
-    }
+    command = captured["command"]
+    assert command[0] == f"C:/tools/{backend.value}.exe"
+    assert captured["cwd"] != Path.cwd()
+    assert captured["timeout"] == 17.0
+    assert captured["env"]["NO_COLOR"] == "1"
+    assert "OPENAI_API_KEY" not in captured["env"]
+    assert "ANTHROPIC_API_KEY" not in captured["env"]
+    if backend is CLIBackend.ANTIGRAVITY:
+        assert captured["input"] is None
+        prompt = command[command.index("--print") + 1]
+        assert "Lee 0x1000" in prompt
+        assert "--sandbox" in command
+        assert "--dangerously-skip-permissions" not in command
+    elif backend is CLIBackend.CODEX:
+        assert "--disable" in command
+        assert "shell_tool" in command
+        assert "--ignore-user-config" in command
+        assert "read-only" in command
+        assert "Lee 0x1000" in captured["input"]
+    else:
+        assert command[command.index("--tools") + 1] == ""
+        assert "--safe-mode" in command
+        assert "--no-session-persistence" in command
+        assert "Lee 0x1000" in captured["input"]
     assert turn.text == "Leyendo."
-    assert turn.tool_calls == [
-        ToolCall("call-1", "read_address", '{"address":4096,"data_type":"int32"}')
-    ]
-    assert turn.raw_output == [function_call]
+    assert len(turn.tool_calls) == 1
+    assert turn.tool_calls[0].call_id.startswith("cli-")
+    assert turn.tool_calls[0].name == "read_address"
+    assert turn.tool_calls[0].arguments_json == '{"address":4096}'
+    assert turn.raw_output == []
 
 
-def test_openai_client_receives_only_configured_connection_options(
+def test_cli_provider_passes_optional_model_to_selected_cli(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict[str, object] = {}
+    captured: list[str] = []
 
-    class _Client:
-        def __init__(self, **options: object) -> None:
-            captured.update(options)
+    def fake_run(command: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        captured.extend(command)
+        return subprocess.CompletedProcess(
+            command, 0, json.dumps({"text": "ok", "tool_calls": []}), ""
+        )
 
-    monkeypatch.setattr(providers_module, "OpenAI", _Client)
+    monkeypatch.setattr(providers_module.subprocess, "run", fake_run)
+    CLIProvider(
+        "codex.exe",
+        AISettings(provider=CLIBackend.CODEX, model="gpt-test"),
+    ).complete("prompt", [], [])
 
-    OpenAIResponsesProvider(
-        "sk-test-not-real-123456",
-        AISettings(base_url="https://provider.invalid/v1", timeout_s=9.5, max_retries=4),
-    )
+    assert captured[captured.index("--model") + 1] == "gpt-test"
 
-    assert captured == {
-        "api_key": "sk-test-not-real-123456",
-        "base_url": "https://provider.invalid/v1",
-        "timeout": 9.5,
-        "max_retries": 4,
-    }
+
+def test_cli_provider_maps_timeout_without_exposing_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def timeout(command: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(command, 9.0, output="private output")
+
+    monkeypatch.setattr(providers_module.subprocess, "run", timeout)
+    provider = CLIProvider("codex.exe", AISettings(provider=CLIBackend.CODEX, timeout_s=9.0))
+
+    with pytest.raises(ProviderError, match="no respondió en 9 s") as captured:
+        provider.complete("prompt private", [], [])
+
+    assert "private" not in str(captured.value)
+
+
+def test_cli_provider_maps_auth_failure_without_raw_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failed(command: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 7, "", "Authentication token secret-value")
+
+    monkeypatch.setattr(providers_module.subprocess, "run", failed)
+    provider = CLIProvider("claude.exe", AISettings(provider=CLIBackend.CLAUDE))
+
+    with pytest.raises(ProviderError, match=r"Inicia sesión.*claude") as captured:
+        provider.complete("prompt", [], [])
+
+    assert "secret-value" not in str(captured.value)
 
 
 @pytest.mark.parametrize(
-    ("raised_name", "expected"),
+    "output",
     [
-        ("APITimeoutError", "no respondió a tiempo"),
-        ("RateLimitError", "Límite de peticiones"),
-        ("AuthenticationError", "Clave de API inválida"),
-        ("BadRequestError", "Petición rechazada"),
-        ("APIConnectionError", "Sin conexión"),
-        ("APIStatusError", "HTTP 503 · solicitud req-provider-unique"),
+        "not-json",
+        json.dumps({"text": "missing calls"}),
+        json.dumps({"text": "", "tool_calls": [{"name": "x", "arguments_json": "[]"}]}),
     ],
 )
-def test_provider_errors_are_mapped_without_exposing_raw_details(
+def test_cli_provider_rejects_incompatible_output(
     monkeypatch: pytest.MonkeyPatch,
-    raised_name: str,
-    expected: str,
+    output: str,
 ) -> None:
-    exception_types = {
-        name: type(f"_Fake{name}", (Exception,), {})
-        for name in (
-            "APITimeoutError",
-            "RateLimitError",
-            "AuthenticationError",
-            "BadRequestError",
-            "APIConnectionError",
-            "APIStatusError",
-        )
-    }
-    for name, exception_type in exception_types.items():
-        monkeypatch.setattr(providers_module, name, exception_type)
-    error = exception_types[raised_name]("raw provider secret")
-    if raised_name == "APIStatusError":
-        error.status_code = 503
-        error.request_id = "req-provider-unique"
-    client = SimpleNamespace(responses=_RaisingResponses(error))
-    provider = OpenAIResponsesProvider(
-        "sk-test-not-real-123456",
-        AISettings(),
-        client=cast(Any, client),
-    )
+    def fake_run(command: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, output, "")
 
-    with pytest.raises(ProviderError, match=expected) as captured:
+    monkeypatch.setattr(providers_module.subprocess, "run", fake_run)
+    provider = CLIProvider("codex.exe", AISettings(provider=CLIBackend.CODEX))
+
+    with pytest.raises(ProviderError, match=r"(incompatible|no estructurados)"):
         provider.complete("prompt", [], [])
 
-    assert "raw provider secret" not in str(captured.value)
+
+def test_cli_executable_resolution_uses_override_then_selected_command(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable = tmp_path / "custom-cli.exe"
+    executable.write_bytes(b"")
+    explicit = AISettings(provider=CLIBackend.CLAUDE, executable=str(executable))
+    assert find_cli_executable(explicit) == str(executable.resolve())
+
+    monkeypatch.setattr(
+        providers_module.shutil,
+        "which",
+        lambda command: f"C:/bin/{command}.exe",
+    )
+    automatic = AISettings(provider=CLIBackend.ANTIGRAVITY)
+    assert find_cli_executable(automatic) == "C:/bin/agy.exe"
+    assert create_cli_provider(automatic) is not None
+    assert create_cli_provider(automatic).name == "Antigravity CLI"  # type: ignore[union-attr]
+    assert create_cli_provider(automatic.model_copy(update={"enabled": False})) is None
 
 
 def test_scripted_provider_replay_prepends_only_fresh_state() -> None:
     scripted = ScriptedProvider(
         [
-            ProviderTurn(
-                "",
-                [ToolCall("scan-1", "get_scan_status", "{}")],
-                [],
-            ),
+            ProviderTurn("", [ToolCall("scan-1", "get_scan_status", "{}")], []),
             ProviderTurn("Escaneo listo.", [], []),
         ]
     )
