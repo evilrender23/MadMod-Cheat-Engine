@@ -6,9 +6,15 @@ from pathlib import Path
 
 import pytest
 from pytestqt.qtbot import QtBot
+from tests.fixtures.fake_backend import FakeMemoryBackend
 
 import mempilot.ui.dialogs.settings_dialog as settings_dialog_module
+import mempilot.ui.main_window as main_window_module
+from mempilot.agent.providers import ScriptedProvider
+from mempilot.app import create_app
 from mempilot.config.settings import AISettings, CLIBackend, Settings
+from mempilot.controller import AppController
+from mempilot.core.backend import Architecture, ProcessIdentity
 from mempilot.services.settings_service import SettingsService
 from mempilot.ui.dialogs.settings_dialog import SettingsDialog
 
@@ -52,3 +58,57 @@ def test_ai_settings_select_cli_and_persist_without_api_fields(
     raw = service.path.read_text(encoding="utf-8")
     assert "api_key" not in raw
     assert "base_url" not in raw
+
+
+def test_main_window_applies_integer_accepted_result_and_reopens_saved_ai_settings(
+    tmp_path: Path,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = SettingsService(tmp_path / "settings.json")
+    initial = Settings(ai=AISettings(provider=CLIBackend.CODEX))
+    identity = ProcessIdentity(77, "target.exe", 1.0, None, Architecture.X64)
+    controller = AppController(
+        FakeMemoryBackend([(0x1000, bytearray(64), 0x04)], identity),
+        settings=initial,
+    )
+    replacement_provider = ScriptedProvider([])
+
+    class _AcceptedSettingsDialog:
+        def __init__(
+            self,
+            settings: Settings,
+            settings_service: SettingsService,
+            _parent: object,
+        ) -> None:
+            self.settings = settings.model_copy(deep=True)
+            self.settings.ai.provider = CLIBackend.ANTIGRAVITY
+            self._service = settings_service
+
+        def exec(self) -> int:
+            self._service.save(self.settings)
+            return 1
+
+    monkeypatch.setattr(main_window_module, "SettingsDialog", _AcceptedSettingsDialog)
+    monkeypatch.setattr(
+        main_window_module,
+        "create_cli_provider",
+        lambda _settings: replacement_provider,
+    )
+    _app, window = create_app(
+        [],
+        controller=controller,
+        settings=initial,
+        settings_service=service,
+        provider=ScriptedProvider([]),
+    )
+    qtbot.addWidget(window)
+    window.show()
+
+    window.open_settings()
+
+    assert window.settings.ai.provider is CLIBackend.ANTIGRAVITY
+    assert service.load().ai.provider is CLIBackend.ANTIGRAVITY
+    assert window.orchestrator is not None
+    assert window.orchestrator.provider is replacement_provider
+    window.close()

@@ -111,6 +111,50 @@ def test_cli_provider_runs_isolated_structured_turn_without_api_keys(
     assert turn.raw_output == []
 
 
+def test_antigravity_compacts_old_turns_instead_of_rejecting_long_conversation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_prompt = ""
+
+    def fake_run(command: list[str], **_options: Any) -> subprocess.CompletedProcess[str]:
+        nonlocal captured_prompt
+        captured_prompt = command[command.index("--print") + 1]
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            json.dumps(
+                {
+                    "status": "SUCCESS",
+                    "structured_output": {"text": "Continuamos.", "tool_calls": []},
+                }
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(providers_module, "_MAX_ANTIGRAVITY_PROMPT_CHARS", 2500)
+    monkeypatch.setattr(providers_module.subprocess, "run", fake_run)
+    replay: list[Any] = [{"role": "system", "content": "estado actual"}]
+    for index in range(8):
+        replay.extend(
+            (
+                {"role": "user", "content": f"turno-{index} " + "u" * 350},
+                {"role": "assistant", "content": f"respuesta-{index} " + "a" * 350},
+            )
+        )
+
+    turn = CLIProvider(
+        "agy.exe",
+        AISettings(provider=CLIBackend.ANTIGRAVITY),
+    ).complete("Instrucciones seguras", replay, [_TOOL_SPEC])
+
+    assert turn.text == "Continuamos."
+    assert len(captured_prompt) <= 2500
+    assert "estado actual" in captured_prompt
+    assert "turno-7" in captured_prompt
+    assert "turno-0" not in captured_prompt
+    assert "compactó contexto antiguo" in captured_prompt
+
+
 def test_cli_provider_passes_optional_model_to_selected_cli(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

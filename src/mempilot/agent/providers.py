@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -91,16 +92,11 @@ class CLIProvider:
         tools: list[dict[str, Any]],
     ) -> ProviderTurn:
         """Request exactly one JSON decision without granting the CLI access to app tools."""
-        prompt = _render_prompt(instructions, input_items, tools)
+        if self._settings.provider is CLIBackend.ANTIGRAVITY:
+            prompt = _bounded_antigravity_prompt(instructions, input_items, tools)
+        else:
+            prompt = _render_prompt(instructions, input_items, tools)
         schema = _response_schema(tools)
-        if (
-            self._settings.provider is CLIBackend.ANTIGRAVITY
-            and len(prompt) > _MAX_ANTIGRAVITY_PROMPT_CHARS
-        ):
-            raise ProviderError(
-                "La conversación supera el límite de Antigravity CLI. "
-                "Reinicia MemPilot o selecciona Codex/Claude para continuar."
-            )
         raw = self._run(prompt, schema)
         envelope = _parse_envelope(self._settings.provider, raw)
         calls: list[ToolCall] = []
@@ -294,6 +290,108 @@ def _render_prompt(
         "como texto. Devuelve texto final sólo cuando no necesites otra herramienta.\n\n"
         f"ENTRADA_MEMPILOT={json.dumps(payload, ensure_ascii=False, separators=(',', ':'))}"
     )
+
+
+def _bounded_antigravity_prompt(
+    instructions: str,
+    input_items: list[Any],
+    tools: list[dict[str, Any]],
+) -> str:
+    """Keep Antigravity below the Windows command-line limit by pruning old replay."""
+    prompt = _render_prompt(instructions, input_items, tools)
+    if len(prompt) <= _MAX_ANTIGRAVITY_PROMPT_CHARS:
+        return prompt
+
+    state = input_items[:1] if _is_role(input_items[:1], "system") else []
+    history = _semantic_replay(input_items[len(state) :])
+    turns = _conversation_turns(history)
+    notice = {
+        "role": "system",
+        "content": (
+            "MemPilot compactó contexto antiguo para respetar el límite de Antigravity. "
+            "El estado de proceso más reciente es autoritativo."
+        ),
+    }
+
+    while turns:
+        compacted = [*state, notice, *(item for turn in turns for item in turn)]
+        prompt = _render_prompt(instructions, compacted, tools)
+        if len(prompt) <= _MAX_ANTIGRAVITY_PROMPT_CHARS:
+            return prompt
+        if len(turns) > 1:
+            turns.pop(0)
+            continue
+        turn = turns[0]
+        protected = {index for index, item in enumerate(turn) if _is_role([item], "user")}
+        if turn:
+            protected.add(len(turn) - 1)
+        removable = next(
+            (index for index in range(len(turn)) if index not in protected),
+            None,
+        )
+        if removable is None:
+            break
+        turn.pop(removable)
+
+    raise ProviderError(
+        "La petición actual es demasiado grande para Antigravity CLI. "
+        "Usa un mensaje más breve o solicita menos resultados."
+    )
+
+
+def _semantic_replay(items: list[Any]) -> list[Any]:
+    """Collapse function call/output pairs into compact, self-describing replay events."""
+    events: list[Any] = []
+    pending: dict[str, dict[str, Any]] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            events.append(item)
+            continue
+        kind = item.get("type")
+        call_id = item.get("call_id")
+        if kind == "function_call" and isinstance(call_id, str):
+            pending[call_id] = item
+            continue
+        if kind == "function_call_output" and isinstance(call_id, str):
+            call = pending.pop(call_id, None)
+            result = item.get("output", "")
+            if isinstance(result, str):
+                with suppress(json.JSONDecodeError):
+                    result = json.loads(result)
+            events.append(
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {
+                            "herramienta": call.get("name", "desconocida")
+                            if call is not None
+                            else "desconocida",
+                            "argumentos": call.get("arguments", "{}") if call is not None else "{}",
+                            "resultado": result,
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                }
+            )
+            continue
+        events.append(item)
+    events.extend(pending.values())
+    return events
+
+
+def _conversation_turns(items: list[Any]) -> list[list[Any]]:
+    turns: list[list[Any]] = []
+    for item in items:
+        if _is_role([item], "user") or not turns:
+            turns.append([item])
+        else:
+            turns[-1].append(item)
+    return turns
+
+
+def _is_role(items: list[Any], role: str) -> bool:
+    return bool(items and isinstance(items[0], dict) and items[0].get("role") == role)
 
 
 def _response_schema(tools: list[dict[str, Any]]) -> dict[str, Any]:

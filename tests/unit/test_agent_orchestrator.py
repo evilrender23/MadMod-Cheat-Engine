@@ -168,7 +168,7 @@ class _Registry:
             for name, mutating, states in definitions
         )
 
-    def specs(self) -> list[dict[str, Any]]:
+    def specs(self, _state: FlowState | None = None) -> list[dict[str, Any]]:
         return [{"type": "function", "name": item.name} for item in self.tools]
 
     def execute(self, name: str, arguments_json: str) -> str:

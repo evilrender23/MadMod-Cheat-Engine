@@ -89,8 +89,18 @@ class ToolRegistry:
         self.tools = tuple(definitions)
         self._by_name = {tool.name: tool for tool in definitions}
 
-    def specs(self) -> list[dict[str, Any]]:
-        """Return flat strict function definitions for the Responses API."""
+    def specs(self, state: FlowState | None = None) -> list[dict[str, Any]]:
+        """Return strict tool definitions, optionally limited to the current flow state."""
+        definitions = (
+            self.tools
+            if state is None
+            else tuple(
+                tool
+                for tool in self.tools
+                if (not tool.requires_attached or state is not FlowState.NO_PROCESS)
+                and (tool.allowed_states is None or state in tool.allowed_states)
+            )
+        )
         return [
             {
                 "type": "function",
@@ -99,7 +109,7 @@ class ToolRegistry:
                 "parameters": strict_schema(tool.args_model),
                 "strict": True,
             }
-            for tool in self.tools
+            for tool in definitions
         ]
 
     def execute(self, name: str, arguments_json: str) -> str:

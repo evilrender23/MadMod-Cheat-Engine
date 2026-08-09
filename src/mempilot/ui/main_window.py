@@ -249,7 +249,7 @@ class MainWindow(QMainWindow):
             self,
         )
         if (
-            consent.exec() is not QDialog.DialogCode.Accepted
+            consent.exec() != QDialog.DialogCode.Accepted
             or not self.orchestrator.activate_autonomous_mode()
         ):
             self.chat_panel.set_mode(AgentMode.GUIDED.value)
@@ -358,7 +358,7 @@ class MainWindow(QMainWindow):
                     allow_remember=False,
                     parent=self.overlay,
                 )
-                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                if confirmation.exec() != QDialog.DialogCode.Accepted:
                     return
             self.controller.set_trainer_trick_active(trick_id, active, Actor.USER)
         except Exception as exc:
@@ -389,7 +389,7 @@ class MainWindow(QMainWindow):
                     allow_remember=True,
                     parent=self.overlay,
                 )
-                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                if confirmation.exec() != QDialog.DialogCode.Accepted:
                     return
                 if confirmation.remember_for_session:
                     self._write_confirmation_enabled = False
@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
                     allow_remember=False,
                     parent=self.overlay,
                 )
-                if confirmation.exec() is not QDialog.DialogCode.Accepted:
+                if confirmation.exec() != QDialog.DialogCode.Accepted:
                     return
             self.controller.set_freeze(
                 watch_id,
@@ -457,7 +457,7 @@ class MainWindow(QMainWindow):
     @Slot()
     def select_process(self) -> None:
         dialog = AttachDialog(self.controller, self.settings.ui.show_system_processes, self)
-        if dialog.exec() is QDialog.DialogCode.Accepted and dialog.identity is not None:
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.identity is not None:
             self._last_write_access = dialog.write_access
             self.top_bar.set_attached(dialog.identity, dialog.write_access)
             self.status_strip.set_message(
@@ -546,7 +546,7 @@ class MainWindow(QMainWindow):
                 allow_remember=True,
                 parent=self,
             )
-            if confirmation.exec() is not QDialog.DialogCode.Accepted:
+            if confirmation.exec() != QDialog.DialogCode.Accepted:
                 return
             if confirmation.remember_for_session:
                 self._write_confirmation_enabled = False
@@ -622,7 +622,7 @@ class MainWindow(QMainWindow):
             )
             return
         dialog = SettingsDialog(self.settings, self.settings_service, self)
-        if dialog.exec() is not QDialog.DialogCode.Accepted:
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         self.settings = dialog.settings
         if self.orchestrator is not None:

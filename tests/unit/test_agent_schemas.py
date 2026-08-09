@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from mempilot.agent.policies import AgentPolicy
+from mempilot.agent.policies import AgentPolicy, FlowState
 from mempilot.agent.schemas import ListProcessesArgs, strict_schema
 from mempilot.agent.tools import ToolRegistry
 
@@ -60,6 +60,19 @@ def test_every_tool_has_flat_strict_responses_schema() -> None:
         assert spec["strict"] is True
         assert "function" not in spec
         _walk_objects(spec["parameters"])
+
+
+def test_tool_specs_are_limited_to_actions_valid_for_current_flow() -> None:
+    registry = ToolRegistry(_ControllerStub(), AgentPolicy())  # type: ignore[arg-type]
+
+    no_process = {spec["name"] for spec in registry.specs(FlowState.NO_PROCESS)}
+    narrowed = {spec["name"] for spec in registry.specs(FlowState.NARROWED)}
+
+    assert "attach_process" in no_process
+    assert "save_trainer_trick" not in no_process
+    assert "attach_process" not in narrowed
+    assert "save_trainer_trick" in narrowed
+    assert len(narrowed) < len(registry.tools)
 
 
 def test_every_tool_argument_model_rejects_unknown_fields() -> None:

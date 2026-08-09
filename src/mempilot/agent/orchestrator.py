@@ -176,7 +176,7 @@ class AgentTurnJob:
                         self._policy,
                     )
                 ),
-                self._registry.specs(),
+                self._registry.specs(snapshot.state),
             )
             self._conversation.add_provider_turn(turn)
             if turn.text.strip():
